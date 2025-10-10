@@ -21,53 +21,82 @@ const Register = () => {
 
     try {
       await register(name, email, password);
-      setSuccess("Registration successful! Redirecting...");
-      setTimeout(() => navigate("/dashboard"), 1500);
+      setSuccess("Registration successful! Redirecting to login...");
+      setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
-      console.error(err);
-      setError("Registration failed. Please try again.");
+      console.error("Registration error:", err.message);
+      setError(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h2>Register</h2>
+    <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
+      <div className="card shadow p-4" style={{ width: "400px" }}>
+        <h2 className="text-center mb-4 text-primary fw-bold">Register</h2>
 
-      {success && <p style={{ color: "green" }}>{success}</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+        {success && (
+          <div className="alert alert-success text-center">{success}</div>
+        )}
+        {error && <div className="alert alert-danger text-center">{error}</div>}
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        <button type="submit" disabled={loading}>
-          {loading ? "Registering..." : "Register"}
-        </button>
-      </form>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label className="form-label fw-semibold">Name</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Enter your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
 
-      <p>
-        Already have an account? <Link to="/login">Login</Link>
-      </p>
+          <div className="mb-3">
+            <label className="form-label fw-semibold">Email</label>
+            <input
+              type="email"
+              className="form-control"
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="mb-3">
+            <label className="form-label fw-semibold">Password</label>
+            <input
+              type="password"
+              className="form-control"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary w-100"
+            disabled={loading}
+          >
+            {loading ? "Registering..." : "Register"}
+          </button>
+        </form>
+
+        <p className="mt-3 text-center text-muted">
+          Already have an account?{" "}
+          <Link
+            to="/login"
+            className="text-decoration-none text-primary fw-semibold"
+          >
+            Login
+          </Link>
+        </p>
+      </div>
     </div>
   );
 };

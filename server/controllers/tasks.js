@@ -1,29 +1,32 @@
 // controllers/tasks.js
 const Task = require("../models/Task");
 
-// Get all tasks for logged-in user
+// Get tasks for logged-in user
 exports.getTasks = async (req, res) => {
   try {
-    const tasks = await Task.find({ user: req.user._id });
-    res.status(200).json(tasks);
+    // Only return tasks for this user and populate user info
+    const tasks = await Task.find({ user: req.user.id }).populate("user");
+    res.json(tasks);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err.message);
+    res.status(500).send("Server Error");
   }
 };
-
 // Create a task
 exports.createTask = async (req, res) => {
+  const { title, description } = req.body;
   try {
-    const { title, description, status } = req.body;
-    const task = await Task.create({
+    const task = new Task({
       title,
       description,
-      status,
-      user: req.user._id, // assign current logged-in user
+      status: "pending",
+      user: req.user.id, // associate task with logged-in user
     });
+    await task.save();
     res.status(201).json(task);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err.message);
+    res.status(500).send("Server Error");
   }
 };
 
@@ -61,5 +64,16 @@ exports.deleteTask = async (req, res) => {
     res.status(200).json({ msg: "Task deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// Admin: get all tasks
+exports.getAllTasksForAdmin = async (req, res) => {
+  try {
+    const tasks = await Task.find().populate("user", "name email");
+    res.json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ msg: "Server error" });
   }
 };

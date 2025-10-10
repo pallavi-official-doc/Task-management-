@@ -19,6 +19,7 @@ exports.register = async (req, res) => {
       name,
       email,
       password,
+      role: "user", // default role
     });
 
     const salt = await bcrypt.genSalt(10);
@@ -29,6 +30,7 @@ exports.register = async (req, res) => {
     const payload = {
       user: {
         id: user.id,
+        role: user.role, // include role in payload
       },
     };
 
@@ -38,7 +40,15 @@ exports.register = async (req, res) => {
       { expiresIn: 3600 },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          }, // send role to frontend
+        });
       }
     );
   } catch (err) {
@@ -69,6 +79,7 @@ exports.login = async (req, res) => {
     const payload = {
       user: {
         id: user.id,
+        role: user.role, // include role in payload
       },
     };
 
@@ -78,7 +89,15 @@ exports.login = async (req, res) => {
       { expiresIn: 3600 },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          }, // send role to frontend
+        });
       }
     );
   } catch (err) {
@@ -93,7 +112,7 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
-    res.json(user);
+    res.json(user); // role is included automatically
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server error");

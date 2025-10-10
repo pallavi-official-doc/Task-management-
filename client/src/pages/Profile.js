@@ -1,7 +1,6 @@
 import React, { useState, useContext } from "react";
-import API from "../api/api"; // ✅ centralized axios instance
+import API from "../api/api";
 import AuthContext from "../context/AuthContext";
-import "../styles/Profile.css";
 
 const Profile = () => {
   const { user, logout } = useContext(AuthContext);
@@ -26,31 +25,58 @@ const Profile = () => {
   };
 
   return (
-    <div className="profile-container">
-      <h2>Profile</h2>
-      <p>Welcome, {user && user.name}!</p>
-      <button className="logout-btn" onClick={logout}>
-        Logout
-      </button>
+    <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
+      <div className="card shadow p-4" style={{ width: "450px" }}>
+        <h2 className="text-center mb-3 text-primary">Profile</h2>
+        <p className="text-center text-secondary mb-3">
+          Welcome, <strong>{user && user.name}</strong>!
+        </p>
 
-      {message && <p className="message">{message}</p>}
-      {error && <p className="error">{error}</p>}
+        <div className="text-center mb-4">
+          <button onClick={logout} className="btn btn-danger w-50">
+            Logout
+          </button>
+        </div>
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="New Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button type="submit">Update Profile</button>
-      </form>
+        {message && (
+          <div className="alert alert-success text-center" role="alert">
+            {message}
+          </div>
+        )}
+        {error && (
+          <div className="alert alert-danger text-center" role="alert">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-3">
+            <label className="form-label fw-semibold">Name</label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Enter your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="mb-3">
+            <label className="form-label fw-semibold">New Password</label>
+            <input
+              type="password"
+              className="form-control"
+              placeholder="Enter new password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary w-100">
+            Update Profile
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
