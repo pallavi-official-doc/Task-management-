@@ -1,8 +1,26 @@
-/* index.css */
 @import "bootstrap/dist/css/bootstrap.min.css";
 
+/* Optional: keep general font family if you want */
 body {
-  background-color: #f8f9fa; /* Light gray background */
-  color: #212529;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* 🔽 Add the helper classes for the new sidebar/header UI */
+.nav-link:hover {
+  background-color: #f0f2f5;
+}
+
+.sidebar-collapsed .nav-link span {
+  display: none;
+}
+
+.rotate-180 {
+  transform: rotate(180deg);
+  transition: transform 0.2s;
+}
+
+.transition {
+  transition: transform 0.2s;
 }

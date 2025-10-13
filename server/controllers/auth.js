@@ -2,57 +2,64 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-// @desc    Register a new user
+// @desc    Register a new user (either public signup OR created by an admin/user)
 // @route   POST /api/auth/register
-// @access  Public
+// @access  Public or Private (if admin creates a team member)
 exports.register = async (req, res) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role } = req.body;
 
   try {
-    let user = await User.findOne({ email });
+    let existingUser = await User.findOne({ email });
 
-    if (user) {
+    if (existingUser) {
       return res.status(400).json({ msg: "User already exists" });
     }
 
-    user = new User({
+    // 🧠 Determine who created this user
+    let createdBy = null;
+    if (req.user && req.user.id) {
+      createdBy = req.user.id; // If a logged-in admin creates the user
+    }
+
+    const user = new User({
       name,
       email,
       password,
-      role: "user", // default role
+      role: role || "user", // Default role is 'user'
+      createdBy,
     });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(password, salt);
-
     await user.save();
 
     const payload = {
       user: {
         id: user.id,
-        role: user.role, // include role in payload
+        role: user.role,
       },
     };
 
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
-      { expiresIn: 3600 },
+      { expiresIn: "7d" },
       (err, token) => {
         if (err) throw err;
-        res.json({
+        res.status(201).json({
           token,
           user: {
             id: user.id,
             name: user.name,
             email: user.email,
             role: user.role,
-          }, // send role to frontend
+            createdBy: user.createdBy,
+          },
         });
       }
     );
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ Register error:", err.message);
     res.status(500).send("Server error");
   }
 };
@@ -64,14 +71,13 @@ exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    let user = await User.findOne({ email });
+    const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(400).json({ msg: "Invalid credentials" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return res.status(400).json({ msg: "Invalid credentials" });
     }
@@ -79,14 +85,14 @@ exports.login = async (req, res) => {
     const payload = {
       user: {
         id: user.id,
-        role: user.role, // include role in payload
+        role: user.role,
       },
     };
 
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
-      { expiresIn: 3600 },
+      { expiresIn: "7d" },
       (err, token) => {
         if (err) throw err;
         res.json({
@@ -96,12 +102,13 @@ exports.login = async (req, res) => {
             name: user.name,
             email: user.email,
             role: user.role,
-          }, // send role to frontend
+            createdBy: user.createdBy,
+          },
         });
       }
     );
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ Login error:", err.message);
     res.status(500).send("Server error");
   }
 };
@@ -112,9 +119,9 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
-    res.json(user); // role is included automatically
+    res.json(user);
   } catch (err) {
-    console.error(err.message);
+    console.error("❌ GetMe error:", err.message);
     res.status(500).send("Server error");
   }
 };
