@@ -34,3 +34,19 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// 📌 GET /users/team
+// 👑 Admin can see all non-admin users (team)
+exports.getTeamUsers = async (req, res) => {
+  try {
+    // Fetch all users except admins
+    const users = await User.find({ role: { $ne: "admin" } }).select(
+      "_id name email role"
+    ); // return only essential fields
+
+    res.json(users);
+  } catch (err) {
+    console.error("❌ Error fetching team users:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};

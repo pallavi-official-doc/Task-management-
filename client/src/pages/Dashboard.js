@@ -354,7 +354,6 @@
 // };
 
 // export default Dashboard;
-
 import React, { useState, useContext } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import AuthContext from "../context/AuthContext";
@@ -364,6 +363,7 @@ import { BsClockHistory, BsBell, BsSearch } from "react-icons/bs";
 const Dashboard = () => {
   const { user, logout } = useContext(AuthContext);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hrOpen, setHrOpen] = useState(true); // 👈 new state for HR
   const [workOpen, setWorkOpen] = useState(true);
   const location = useLocation();
 
@@ -398,6 +398,7 @@ const Dashboard = () => {
 
         <nav className="flex-grow-1">
           <ul className="nav flex-column gap-1">
+            {/* Dashboard */}
             <li>
               <Link
                 to="/dashboard"
@@ -412,7 +413,76 @@ const Dashboard = () => {
               </Link>
             </li>
 
-            {/* Work Section */}
+            {/* ✅ HR Section */}
+            <li className="mt-2">
+              <div
+                className="d-flex justify-content-between align-items-center px-2 py-1 text-muted small"
+                style={{ cursor: "pointer" }}
+                onClick={() => setHrOpen(!hrOpen)}
+              >
+                <span>HR</span>
+                <FiChevronDown
+                  className={`transition ${hrOpen ? "rotate-180" : ""}`}
+                />
+              </div>
+
+              {hrOpen && (
+                <ul className="nav flex-column ms-2">
+                  {/* 📝 Leaves */}
+                  <li>
+                    <Link
+                      to="/dashboard/hr/leaves"
+                      className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                        location.pathname.includes("hr/leaves")
+                          ? "bg-primary text-white"
+                          : "text-dark"
+                      }`}
+                    >
+                      🌿
+                      <span className={sidebarOpen ? "" : "d-none"}>
+                        Leaves
+                      </span>
+                    </Link>
+                  </li>
+
+                  {/* ⏰ Attendance */}
+                  <li>
+                    <Link
+                      to="/dashboard/hr/attendance"
+                      className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                        location.pathname.includes("attendance")
+                          ? "bg-primary text-white"
+                          : "text-dark"
+                      }`}
+                    >
+                      🕒
+                      <span className={sidebarOpen ? "" : "d-none"}>
+                        Attendance
+                      </span>
+                    </Link>
+                  </li>
+
+                  {/* 📅 Holidays */}
+                  <li>
+                    <Link
+                      to="/dashboard/hr/holidays"
+                      className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                        location.pathname.includes("holidays")
+                          ? "bg-primary text-white"
+                          : "text-dark"
+                      }`}
+                    >
+                      📅
+                      <span className={sidebarOpen ? "" : "d-none"}>
+                        Holidays
+                      </span>
+                    </Link>
+                  </li>
+                </ul>
+              )}
+            </li>
+
+            {/* WORK Section */}
             <li className="mt-2">
               <div
                 className="d-flex justify-content-between align-items-center px-2 py-1 text-muted small"
@@ -444,7 +514,7 @@ const Dashboard = () => {
                     </Link>
                   </li>
 
-                  {/* 📝 Tasks → UPDATED PATH */}
+                  {/* 📝 Tasks */}
                   <li>
                     <Link
                       to="/dashboard/tasks"

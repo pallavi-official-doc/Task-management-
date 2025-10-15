@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
+import Select from "react-select";
+
 import API from "../api/api";
 import moment from "moment";
+import AuthContext from "../context/AuthContext";
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
@@ -8,7 +11,7 @@ const Projects = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [progressFilter, setProgressFilter] = useState("All");
-
+  const { user } = useContext(AuthContext);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -46,6 +49,10 @@ const Projects = () => {
     fetchUsers();
   }, []);
 
+  useEffect(() => {
+    console.log("Loaded team users:", users);
+  }, [users]);
+
   // 🔍 Filter projects
   const filteredProjects = projects.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -65,21 +72,32 @@ const Projects = () => {
   };
 
   // ✅ Handle Members selection (multi-select)
-  const handleMemberSelect = (e) => {
-    const selectedOptions = Array.from(e.target.selectedOptions).map(
-      (option) => option.value
-    );
-    setFormData({ ...formData, members: selectedOptions });
-  };
+  // const handleMemberSelect = (e) => {
+  //   const selectedOptions = Array.from(e.target.selectedOptions).map(
+  //     (option) => option.value
+  //   );
+  //   setFormData({ ...formData, members: selectedOptions });
+  // };
 
   // ➕ Create / ✏ Update Project
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (user?.role !== "admin") {
+      setError("Only admins can create or edit projects.");
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      setError("Project name is required.");
+      return;
+    }
+
     try {
       const payload = {
         ...formData,
         startDate: formData.startDate || null,
-        endDate: formData.endDate || null,
+        deadline: formData.endDate || null, // ✅ renamed properly
       };
 
       if (editId) {
@@ -143,9 +161,14 @@ const Projects = () => {
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h3>Projects</h3>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          ➕ New Project
-        </button>
+        {user?.role === "admin" && ( // ✅ only show to admin
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowModal(true)}
+          >
+            ➕ New Project
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -213,10 +236,11 @@ const Projects = () => {
                   </td>
                   <td>{moment(project.startDate).format("DD/MM/YYYY")}</td>
                   <td>
-                    {project.endDate
-                      ? moment(project.endDate).format("DD/MM/YYYY")
+                    {project.deadline
+                      ? moment(project.deadline).format("DD/MM/YYYY")
                       : "—"}
                   </td>
+
                   <td>
                     <span
                       className={`badge ${
@@ -224,12 +248,19 @@ const Projects = () => {
                           ? "bg-success"
                           : project.status === "Completed"
                           ? "bg-primary"
-                          : "bg-danger"
+                          : project.status === "Overdue"
+                          ? "bg-danger"
+                          : project.status === "On Hold"
+                          ? "bg-warning text-dark"
+                          : project.status === "Cancelled"
+                          ? "bg-secondary"
+                          : "bg-info"
                       }`}
                     >
                       {project.status}
                     </span>
                   </td>
+
                   <td>
                     <button
                       className="btn btn-sm btn-outline-primary me-1"
@@ -302,18 +333,26 @@ const Projects = () => {
 
                   <div className="mb-3">
                     <label className="form-label">Members</label>
-                    <select
-                      multiple
-                      className="form-select"
-                      value={formData.members}
-                      onChange={handleMemberSelect}
-                    >
-                      {users.map((user) => (
-                        <option key={user._id} value={user._id}>
-                          {user.name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
+                    <Select
+                      isMulti
+                      placeholder="Select team members..."
+                      options={users.map((user) => ({
+                        value: user._id,
+                        label: `${user.name} (${user.email})`,
+                      }))}
+                      value={users
+                        .filter((u) => formData.members.includes(u._id))
+                        .map((u) => ({
+                          value: u._id,
+                          label: `${u.name} (${u.email})`,
+                        }))}
+                      onChange={(selected) =>
+                        setFormData({
+                          ...formData,
+                          members: selected.map((s) => s.value),
+                        })
+                      }
+                    />
                   </div>
 
                   <div className="mb-3">

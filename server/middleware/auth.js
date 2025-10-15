@@ -32,3 +32,13 @@ exports.protect = async (req, res, next) => {
     res.status(401).json({ msg: "Token is not valid" });
   }
 };
+exports.authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to access this resource" });
+    }
+    next();
+  };
+};

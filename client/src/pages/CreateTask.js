@@ -66,9 +66,8 @@ const CreateTask = () => {
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get("id");
 
-  // Form fields
+  // ✅ Form fields
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
   const [project, setProject] = useState("");
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -76,7 +75,28 @@ const CreateTask = () => {
   const [description, setDescription] = useState("");
   const [error, setError] = useState(null);
 
-  // Fetch existing task if editing
+  // ✅ Dropdown data
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  // 🧠 Fetch projects and users for dropdowns
+  useEffect(() => {
+    const fetchDropdownData = async () => {
+      try {
+        const projRes = await API.get("/projects");
+        setProjects(projRes.data || []);
+
+        const userRes = await API.get("/users"); // backend must have this
+        setUsers(userRes.data || []);
+      } catch (err) {
+        console.error("❌ Error fetching dropdown data:", err);
+      }
+    };
+
+    fetchDropdownData();
+  }, []);
+
+  // ✏️ If editing task
   useEffect(() => {
     if (!taskId) return;
 
@@ -85,14 +105,13 @@ const CreateTask = () => {
         const res = await API.get(`/tasks/${taskId}`);
         const data = res.data;
         setTitle(data.title);
-        setCategory(data.category || "");
         setProject(data.project || "");
         setStartDate(data.startDate ? data.startDate.split("T")[0] : "");
         setDueDate(data.dueDate ? data.dueDate.split("T")[0] : "");
         setAssignedTo(data.assignedTo || "");
         setDescription(data.description || "");
       } catch (err) {
-        console.error(err);
+        console.error("❌ Failed to load task for editing", err);
         setError("Failed to load task for editing");
       }
     };
@@ -100,29 +119,31 @@ const CreateTask = () => {
     fetchTask();
   }, [taskId]);
 
+  // 📝 Submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
     const taskData = {
       title,
-      category,
-      project,
+      project: project || null,
       startDate,
       dueDate,
-      assignedTo,
+      assignedTo: assignedTo || null,
       description,
     };
 
     try {
       if (taskId) {
-        // Edit Task
+        // ✏️ Edit
         await API.put(`/tasks/${taskId}`, taskData);
       } else {
-        // Create New Task
+        // ➕ Create
         await API.post("/tasks", taskData);
       }
-      navigate("/dashboard/all-tasks");
+      navigate("/dashboard/tasks");
     } catch (err) {
-      console.error(err);
+      console.error("❌ Save task error", err);
       setError("Failed to save task");
     }
   };
@@ -138,6 +159,7 @@ const CreateTask = () => {
         <h5 className="mb-3">Task Info</h5>
 
         <div className="row g-3">
+          {/* 📝 Title */}
           <div className="col-md-6">
             <label className="form-label">Title *</label>
             <input
@@ -150,28 +172,24 @@ const CreateTask = () => {
             />
           </div>
 
-          <div className="col-md-6">
-            <label className="form-label">Task Category</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-          </div>
-
+          {/* 🧭 Project */}
           <div className="col-md-6">
             <label className="form-label">Project</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Select project"
+            <select
+              className="form-select"
               value={project}
               onChange={(e) => setProject(e.target.value)}
-            />
+            >
+              <option value="">Select Project</option>
+              {projects.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* 🗓 Start Date */}
           <div className="col-md-3">
             <label className="form-label">Start Date</label>
             <input
@@ -182,6 +200,7 @@ const CreateTask = () => {
             />
           </div>
 
+          {/* 🗓 Due Date */}
           <div className="col-md-3">
             <label className="form-label">Due Date</label>
             <input
@@ -192,17 +211,24 @@ const CreateTask = () => {
             />
           </div>
 
+          {/* 👤 Assigned To */}
           <div className="col-md-6">
             <label className="form-label">Assigned To</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Employee Name"
+            <select
+              className="form-select"
               value={assignedTo}
               onChange={(e) => setAssignedTo(e.target.value)}
-            />
+            >
+              <option value="">Select Employee</option>
+              {users.map((u) => (
+                <option key={u._id} value={u._id}>
+                  {u.name}
+                </option>
+              ))}
+            </select>
           </div>
 
+          {/* 📝 Description */}
           <div className="col-md-12">
             <label className="form-label">Description</label>
             <textarea
@@ -225,7 +251,6 @@ const CreateTask = () => {
               className="btn btn-secondary"
               onClick={() => {
                 setTitle("");
-                setCategory("");
                 setProject("");
                 setStartDate("");
                 setDueDate("");
@@ -239,7 +264,7 @@ const CreateTask = () => {
           <button
             type="button"
             className="btn btn-outline-dark"
-            onClick={() => navigate("/dashboard/all-tasks")}
+            onClick={() => navigate("/dashboard/tasks")}
           >
             Cancel
           </button>

@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { updateProfile } = require("../controllers/users");
-const { protect } = require("../middleware/auth");
+const { updateProfile, getTeamUsers } = require("../controllers/users");
+const { protect, authorize } = require("../middleware/auth");
 const User = require("../models/User");
 
-// 🧠 Fetch all users (for project members dropdown)
+// 👤 Fetch all users (optional: could be admin-only)
 router.get("/", protect, async (req, res) => {
   try {
     const users = await User.find({}, "name email"); // only return name & email
@@ -15,16 +15,8 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
-router.get("/team", protect, async (req, res) => {
-  try {
-    const team = await User.find({ createdBy: req.user.id }).select(
-      "name email"
-    );
-    res.json(team);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to load team users" });
-  }
-});
+// 👥 Get team users created by the logged-in admin (used in Project Members dropdown)
+router.get("/team", protect, authorize("admin"), getTeamUsers);
 
 // ✏️ Update user profile
 router.put("/profile", protect, updateProfile);

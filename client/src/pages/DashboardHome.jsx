@@ -1,28 +1,60 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useState, useContext, useCallback } from "react";
 import AuthContext from "../context/AuthContext";
 import API from "../api/api";
 import moment from "moment";
 
-
 const DashboardHome = () => {
   const { user } = useContext(AuthContext);
 
-  // 🧠 State
-  const [taskSummary, setTaskSummary] = useState({ pending: 0, completed: 0, overdue: 0 });
-  const [tasks, setTasks] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [birthdays, setBirthdays] = useState([]);
-  const [appreciations, setAppreciations] = useState([]);
-  const [onLeave, setOnLeave] = useState([]);
-  const [wfh, setWfh] = useState([]);
+  // 📌 States
+  const [taskSummary, setTaskSummary] = useState({
+    pending: 0,
+    doing: 0,
+    completed: 0,
+    overdue: 0,
+  });
+  const [projectSummary, setProjectSummary] = useState({
+    active: 0,
+    overdue: 0,
+  });
+  const [todayTasks, setTodayTasks] = useState([]);
   const [attendance, setAttendance] = useState(null);
+  const [now, setNow] = useState(new Date()); // 🕒 Auto-updating clock
 
-  // ⏱ Clock In/Out Handlers
+  // 🕒 Auto update time every 60s
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 📡 Fetch dashboard data
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [taskRes, projectRes, attRes, todayRes] = await Promise.all([
+        API.get("/tasks/summary"),
+        API.get("/projects/summary"),
+        API.get("/attendance/status"),
+        API.get("/tasks/today"), // 👉 Only today's tasks
+      ]);
+
+      setTaskSummary(taskRes.data);
+      setProjectSummary(projectRes.data);
+      setAttendance(attRes.data);
+      setTodayTasks(todayRes.data);
+    } catch (err) {
+      console.error("Dashboard data fetch error", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // ⏰ Clock In/Out
   const handleClockIn = async () => {
     try {
       await API.post("/attendance/clockin");
-      const res = await API.get("/attendance/status");
-      setAttendance(res.data);
+      fetchDashboardData();
     } catch (err) {
       console.error("Clock In failed", err);
     }
@@ -31,294 +63,143 @@ const DashboardHome = () => {
   const handleClockOut = async () => {
     try {
       await API.post("/attendance/clockout");
-      const res = await API.get("/attendance/status");
-      setAttendance(res.data);
+      fetchDashboardData();
     } catch (err) {
       console.error("Clock Out failed", err);
     }
   };
 
-  // 📡 Fetch dashboard data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [
-          summaryRes,
-          taskRes,
-          projRes,
-          bdayRes,
-          appRes,
-          leaveRes,
-          wfhRes,
-          attRes,
-        ] = await Promise.all([
-          API.get("/tasks/summary"),             // ✅ Task counts
-          API.get("/tasks?limit=5"),            // ✅ Last 5 tasks for table
-          API.get("/projects"),                 // ✅ Projects
-          API.get("/employees/birthdays"),      // ✅ Birthdays
-          API.get("/employees/appreciations"),  // ✅ Appreciations
-          API.get("/employees/onleave"),       // ✅ On Leave
-          API.get("/employees/wfh"),           // ✅ WFH
-          API.get("/attendance/status"),        // ✅ Attendance
-        ]);
-
-        setTaskSummary(summaryRes.data);
-        setTasks(taskRes.data);
-        setProjects(projRes.data);
-        setBirthdays(bdayRes.data);
-        setAppreciations(appRes.data);
-        setOnLeave(leaveRes.data);
-        setWfh(wfhRes.data);
-        setAttendance(attRes.data);
-      } catch (err) {
-        console.error("Dashboard data fetch error", err);
-      }
-    };
-
-    fetchData();
-  }, []);
-  const refreshTasks = async () => {
-  try {
-    const res = await API.get("/tasks?limit=5");
-    setTasks(res.data);
-  } catch (err) {
-    console.error("Failed to refresh tasks", err);
-  }
-};
-
-
   return (
     <div className="container-fluid">
       {/* 🧭 Top Section */}
       <div className="row mb-4">
-        {/* User Card */}
-        <div className="col-md-3">
+        {/* 👤 User Info */}
+        <div className="col-lg-3 col-md-6 mb-3">
           <div className="card p-3 shadow-sm h-100">
             <div className="d-flex align-items-center">
               <div className="rounded-circle bg-secondary text-white p-3 me-3 fs-4">
-                {user?.name?.[0].toUpperCase()}
+                {user?.name?.[0]?.toUpperCase()}
               </div>
               <div>
                 <h6 className="mb-0">{user?.name}</h6>
                 <small className="text-muted">{user?.designation || "Intern"}</small>
-                <div className="small text-muted">Employee ID: {user?.employeeCode || "N/A"}</div>
+                <div className="small text-muted">ID: {user?.employeeCode || "N/A"}</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Tasks Summary */}
-        <div className="col-md-3">
-          <div className="card p-3 shadow-sm h-100">
-            <h6>Tasks</h6>
-            <div className="d-flex justify-content-between">
-              <span>Pending</span>
-              <span className="fw-bold text-primary">{taskSummary.pending}</span>
-            </div>
-            <div className="d-flex justify-content-between">
-              <span>Completed</span>
-              <span className="fw-bold text-success">{taskSummary.completed}</span>
-            </div>
-            <div className="d-flex justify-content-between">
-              <span>Overdue</span>
-              <span className="fw-bold text-danger">{taskSummary.overdue}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Projects */}
-        <div className="col-md-3">
-          <div className="card p-3 shadow-sm h-100">
-            <h6>Projects</h6>
-            <div className="d-flex justify-content-between">
-              <span>In Progress</span>
-              <span className="fw-bold text-primary">
-                {projects.filter(p => p.status === "Active").length}
-              </span>
-            </div>
-            <div className="d-flex justify-content-between">
-              <span>Overdue</span>
-              <span className="fw-bold text-danger">
-                {projects.filter(p => p.status === "Overdue").length}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Clock In / Out */}
-        <div className="col-md-3 d-flex flex-column justify-content-center align-items-end">
-          {attendance?.clockIn && !attendance?.clockOut ? (
-            <>
-              <div className="fw-bold fs-5 mb-2">
-                {moment(attendance.clockIn).format("hh:mm A")}
+        {/* 📊 Task + Project Summary */}
+        <div className="col-lg-5 col-md-6 mb-3">
+          <div className="card p-3 shadow-sm h-100 d-flex flex-row justify-content-between">
+            {/* Tasks */}
+            <div>
+              <h6>Tasks</h6>
+              <div className="d-flex justify-content-between small">
+                <span>Pending</span>
+                <span className="fw-bold text-primary">{taskSummary.pending}</span>
               </div>
-              <button className="btn btn-danger" onClick={handleClockOut}>Clock Out</button>
-            </>
-          ) : (
-            <button className="btn btn-success" onClick={handleClockIn}>Clock In</button>
-          )}
+              <div className="d-flex justify-content-between small">
+                <span>Doing</span>
+                <span className="fw-bold text-warning">{taskSummary.doing}</span>
+              </div>
+              <div className="d-flex justify-content-between small">
+                <span>Completed</span>
+                <span className="fw-bold text-success">{taskSummary.completed}</span>
+              </div>
+              <div className="d-flex justify-content-between small">
+                <span>Overdue</span>
+                <span className="fw-bold text-danger">{taskSummary.overdue}</span>
+              </div>
+            </div>
+
+            {/* Projects */}
+            <div>
+              <h6>Projects</h6>
+              <div className="d-flex justify-content-between small">
+                <span>Active</span>
+                <span className="fw-bold text-primary">{projectSummary.active}</span>
+              </div>
+              <div className="d-flex justify-content-between small">
+                <span>Overdue</span>
+                <span className="fw-bold text-danger">{projectSummary.overdue}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ⏱ Clock In / Out */}
+        <div className="col-lg-4 col-md-12 mb-3">
+          <div className="card p-3 shadow-sm h-100 d-flex flex-column justify-content-between">
+            <div className="text-end mb-2">
+              <div className="fw-bold fs-5">{moment(now).format("hh:mm A")}</div>
+              <div className="text-muted small">{moment(now).format("dddd")}</div>
+              {attendance?.clockIn && !attendance?.clockOut && (
+                <div className="small text-muted">
+                  Clocked in at: {moment(attendance.clockIn).format("hh:mm A")}
+                </div>
+              )}
+            </div>
+
+            <div className="text-end">
+              {attendance?.clockIn && !attendance?.clockOut ? (
+                <button className="btn btn-danger btn-sm" onClick={handleClockOut}>
+                  <i className="fas fa-sign-out-alt me-1"></i> Clock Out
+                </button>
+              ) : (
+                <button className="btn btn-success btn-sm" onClick={handleClockIn}>
+                  <i className="fas fa-sign-in-alt me-1"></i> Clock In
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* 📊 Middle Section */}
+      {/* 📋 My Tasks (Today) */}
       <div className="row mb-4">
-        {/* 📊 My Recent Tasks */}
-<div className="col-md-6">
-  <div className="card p-3 shadow-sm h-100">
-    <h6>My Recent Tasks</h6>
-    <table className="table table-sm mt-2">
-      <thead>
-        <tr>
-          <th>Timer</th>
-          <th>Task</th>
-          <th>Status</th>
-          <th>Due</th>
-        </tr>
-      </thead>
-      <tbody>
-        {tasks.length > 0 ? (
-          tasks.map((task) => {
-            const getElapsed = () => {
-              if (task.running && task.lastStartedAt) {
-                const extra = Date.now() - new Date(task.lastStartedAt).getTime();
-                return task.totalSeconds * 1000 + extra;
-              }
-              return task.totalSeconds * 1000;
-            };
-
-            const formatTime = (ms) => {
-              const totalSeconds = Math.floor(ms / 1000);
-              const h = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-              const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-              const s = String(totalSeconds % 60).padStart(2, "0");
-              return `${h}:${m}:${s}`;
-            };
-
-            const startTimer = async () => {
-              await API.put(`/tasks/${task._id}/start`);
-              refreshTasks();
-            };
-
-            const pauseTimer = async () => {
-              await API.put(`/tasks/${task._id}/pause`);
-              refreshTasks();
-            };
-
-            const resetTimer = async () => {
-              await API.put(`/tasks/${task._id}/reset`);
-              refreshTasks();
-            };
-
-            return (
-              <tr key={task._id}>
-                {/* ✅ Timer Column */}
-                <td>
-                  <div className="d-flex align-items-center gap-1">
-                    {!task.running ? (
-                      <button
-                        className="btn btn-sm btn-outline-success"
-                        onClick={startTimer}
-                        title="Start"
-                      >
-                        <i className="fas fa-play"></i>
-                      </button>
-                    ) : (
-                      <button
-                        className="btn btn-sm btn-outline-warning"
-                        onClick={pauseTimer}
-                        title="Pause"
-                      >
-                        <i className="fas fa-pause"></i>
-                      </button>
-                    )}
-
-                    <button
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={resetTimer}
-                      title="Reset"
-                    >
-                      <i className="fas fa-stop"></i>
-                    </button>
-
-                    <span className="badge bg-primary">
-                      {formatTime(getElapsed())}
-                    </span>
-                  </div>
-                </td>
-
-                {/* Other Columns */}
-                <td>{task.title}</td>
-                <td>{task.status}</td>
-                <td>{task.dueDate ? moment(task.dueDate).format("MMM DD") : "-"}</td>
-              </tr>
-            );
-          })
-        ) : (
-          <tr>
-            <td colSpan="4" className="text-center text-muted">
-              No tasks found
-            </td>
-          </tr>
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
-      </div>
-
-      {/* 🧍 Bottom Section */}
-      <div className="row">
-        {/* Birthdays */}
-        <div className="col-md-3">
+        <div className="col-md-8">
           <div className="card p-3 shadow-sm h-100">
-            <h6>Birthdays</h6>
-            <ul className="list-group list-group-flush mt-2">
-              {birthdays.length ? birthdays.map(b => (
-                <li key={b._id} className="list-group-item d-flex justify-content-between">
-                  <span>{b.name}</span>
-                  <span>{moment(b.birthday).format("MMM DD")}</span>
-                </li>
-              )) : <li className="list-group-item text-muted small">No upcoming birthdays</li>}
-            </ul>
-          </div>
-        </div>
-
-        {/* Appreciations */}
-        <div className="col-md-3">
-          <div className="card p-3 shadow-sm h-100">
-            <h6>Employee Appreciations</h6>
-            <ul className="list-group list-group-flush mt-2">
-              {appreciations.length ? appreciations.map(a => (
-                <li key={a._id} className="list-group-item d-flex justify-content-between">
-                  <span>{a.user?.name}</span>
-                  <span className="badge bg-info">{a.title}</span>
-                </li>
-              )) : <li className="list-group-item text-muted small">No appreciations</li>}
-            </ul>
-          </div>
-        </div>
-
-        {/* On Leave */}
-        <div className="col-md-3">
-          <div className="card p-3 shadow-sm h-100">
-            <h6>On Leave Today</h6>
-            <ul className="list-group list-group-flush mt-2">
-              {onLeave.length ? onLeave.map(e => (
-                <li key={e._id} className="list-group-item">{e.name}</li>
-              )) : <li className="list-group-item text-muted small">No one is on leave</li>}
-            </ul>
-          </div>
-        </div>
-
-        {/* WFH */}
-        <div className="col-md-3">
-          <div className="card p-3 shadow-sm h-100">
-            <h6>Work From Home Today</h6>
-            <ul className="list-group list-group-flush mt-2">
-              {wfh.length ? wfh.map(e => (
-                <li key={e._id} className="list-group-item">{e.name}</li>
-              )) : <li className="list-group-item text-muted small">No WFH records</li>}
-            </ul>
+            <h6>My Tasks</h6>
+            <table className="table table-sm mt-2">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Task</th>
+                  <th>Status</th>
+                  <th>Due Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayTasks.length > 0 ? (
+                  todayTasks.map((task, index) => (
+                    <tr key={task._id}>
+                      <td>{index + 1}</td>
+                      <td>{task.title}</td>
+                      <td>
+                        <span
+                          className={`me-1 ${
+                            task.status.toLowerCase() === "incomplete" ? "text-danger" : "text-success"
+                          }`}
+                        >
+                          ●
+                        </span>
+                        {task.status}
+                      </td>
+                      <td>
+                        {task.dueDate ? moment(task.dueDate).format("MMM DD") : "-"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="text-center text-muted">
+                      No tasks for today
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -327,5 +208,6 @@ const DashboardHome = () => {
 };
 
 export default DashboardHome;
+
 
 

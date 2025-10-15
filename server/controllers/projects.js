@@ -26,66 +26,64 @@ const cleanObjectId = (id) => {
 };
 
 // ✅ Create Project
+// ✅ Create Project (Admin only)
+// ✅ Create Project (Admin only)
 exports.createProject = async (req, res) => {
   try {
-    let {
-      code,
-      name,
-      description,
-      client,
-      status,
-      progress,
-      startDate,
-      deadline,
-      members,
-    } = req.body;
+    const { name, description, members, client, startDate, deadline } =
+      req.body;
 
+    // Clean members list
     const memberIds = cleanObjectIdArray(members);
-    const clientId = cleanObjectId(client);
+    let memberDetails = [];
 
-    // ✅ Validate members belong to creator’s team
-    let validMemberIds = [];
     if (memberIds.length > 0) {
-      const validMembers = await User.find({
+      const selectedMembers = await User.find({
         _id: { $in: memberIds },
-        createdBy: req.user.id,
-      }).select("_id");
-      validMemberIds = validMembers.map((u) => u._id);
+      }).select("name email");
+      memberDetails = selectedMembers.map((m) => ({
+        userId: m._id,
+        name: m.name,
+        email: m.email,
+      }));
     }
 
     const project = await Project.create({
-      code,
       name,
       description,
-      client: clientId,
-      status,
-      progress: progress || 0,
-      startDate,
+      client: cleanObjectId(client),
+      members: memberDetails,
+      startDate, // 👈 added
       deadline,
-      members: validMemberIds,
-      createdBy: req.user.id,
+      createdBy: req.user._id,
     });
 
     res.status(201).json(project);
   } catch (err) {
     console.error("❌ Create project error:", err);
-    res.status(500).json({ message: "Failed to create project" });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-// ✅ Get all projects for logged-in user
+//  ✅ Get all projects (Admin see all, Employees see only assigned)
 exports.getProjects = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user.id);
+    let filter = {};
 
-    const projects = await Project.find({
-      $or: [{ createdBy: userId }, { members: userId }],
-    })
-      .populate("members", "name email")
-      .populate("client", "name email")
+    if (req.user.role !== "admin") {
+      filter = { $or: [{ createdBy: userId }, { members: userId }] };
+    }
+    const projects = await Project.find(filter)
+      .populate("members", "name email") // ✅ must be here
       .sort({ createdAt: -1 });
 
-    res.json(projects);
+    const response = projects.map((p) => ({
+      ...p.toObject(),
+      status: p.computedStatus, // ✅ dynamic status
+    }));
+
+    res.json(response);
   } catch (err) {
     console.error("❌ Get projects error:", err);
     res.status(500).json({ message: "Server error" });
@@ -93,19 +91,34 @@ exports.getProjects = async (req, res) => {
 };
 
 // ✅ Get Project Summary (User)
+// ✅ Get Project Summary (for Dashboard)
 exports.getProjectSummary = async (req, res) => {
   try {
     const userId = new mongoose.Types.ObjectId(req.user.id);
+    const now = new Date();
 
-    const [planned, active, onHold, completed, cancelled] = await Promise.all([
-      Project.countDocuments({ members: userId, status: "Planned" }),
-      Project.countDocuments({ members: userId, status: "Active" }),
-      Project.countDocuments({ members: userId, status: "On Hold" }),
-      Project.countDocuments({ members: userId, status: "Completed" }),
-      Project.countDocuments({ members: userId, status: "Cancelled" }),
-    ]);
+    // 👑 Admin sees all projects
+    // 👤 Employees: createdBy OR member of the project
+    const base =
+      req.user.role === "admin"
+        ? {}
+        : { $or: [{ createdBy: userId }, { "members.userId": userId }] };
 
-    res.json({ planned, active, onHold, completed, cancelled });
+    // 🟢 Active projects: Planned / Active / On Hold + not overdue
+    const active = await Project.countDocuments({
+      ...base,
+      status: { $in: ["Planned", "Active", "On Hold"] },
+      $or: [{ deadline: { $exists: false } }, { deadline: { $gte: now } }],
+    });
+
+    // 🔴 Overdue projects: not completed or cancelled & deadline in past
+    const overdue = await Project.countDocuments({
+      ...base,
+      status: { $nin: ["Completed", "Cancelled"] },
+      deadline: { $lt: now },
+    });
+
+    res.json({ active, overdue });
   } catch (err) {
     console.error("❌ Project summary error:", err);
     res.status(500).json({ message: "Server error" });
@@ -113,17 +126,24 @@ exports.getProjectSummary = async (req, res) => {
 };
 
 // ✅ Project summary (Admin)
+// ✅ Project summary (Admin - Dashboard format)
 exports.getProjectSummaryForAdmin = async (req, res) => {
   try {
-    const [planned, active, onHold, completed, cancelled] = await Promise.all([
-      Project.countDocuments({ status: "Planned" }),
-      Project.countDocuments({ status: "Active" }),
-      Project.countDocuments({ status: "On Hold" }),
-      Project.countDocuments({ status: "Completed" }),
-      Project.countDocuments({ status: "Cancelled" }),
-    ]);
+    const now = new Date();
 
-    res.json({ planned, active, onHold, completed, cancelled });
+    // 🟢 Active projects for admin: Planned, Active, On Hold + not overdue
+    const active = await Project.countDocuments({
+      status: { $in: ["Planned", "Active", "On Hold"] },
+      $or: [{ deadline: { $exists: false } }, { deadline: { $gte: now } }],
+    });
+
+    // 🔴 Overdue projects for admin: not completed/cancelled + deadline in past
+    const overdue = await Project.countDocuments({
+      status: { $nin: ["Completed", "Cancelled"] },
+      deadline: { $lt: now },
+    });
+
+    res.json({ active, overdue });
   } catch (err) {
     console.error("❌ Admin project summary error:", err);
     res.status(500).json({ message: "Server error" });
@@ -133,27 +153,26 @@ exports.getProjectSummaryForAdmin = async (req, res) => {
 // ✅ Update Project
 exports.updateProject = async (req, res) => {
   try {
-    const { members, client, ...otherData } = req.body;
-
+    const { members, ...otherData } = req.body;
     const memberIds = cleanObjectIdArray(members);
-    const clientId = cleanObjectId(client);
 
-    let validMemberIds = [];
+    let memberDetails = [];
     if (memberIds.length > 0) {
-      const validMembers = await User.find({
+      const selectedMembers = await User.find({
         _id: { $in: memberIds },
-        createdBy: req.user.id,
-      }).select("_id");
-      validMemberIds = validMembers.map((u) => u._id);
+      }).select("name email");
+      memberDetails = selectedMembers.map((m) => ({
+        userId: m._id,
+        name: m.name,
+        email: m.email,
+      }));
     }
 
     const updated = await Project.findByIdAndUpdate(
       req.params.id,
-      { ...otherData, members: validMemberIds, client: clientId },
+      { ...otherData, members: memberDetails },
       { new: true }
-    )
-      .populate("members", "name email")
-      .populate("client", "name email");
+    );
 
     if (!updated) return res.status(404).json({ message: "Project not found" });
 

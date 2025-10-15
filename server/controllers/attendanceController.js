@@ -1,65 +1,55 @@
 const Attendance = require("../models/Attendance");
 const moment = require("moment");
 
-exports.clockIn = async (req, res) => {
+// 📌 Get attendance for user (by month & year)
+exports.getAttendance = async (req, res) => {
   try {
-    const today = moment().format("YYYY-MM-DD");
-    const existing = await Attendance.findOne({
-      user: req.user.id,
-      date: today,
+    const userId = req.user.role === "admin" ? req.query.userId : req.user.id;
+    const month = parseInt(req.query.month);
+    const year = parseInt(req.query.year);
+
+    if (!month || !year) {
+      return res.status(400).json({ message: "Month and year required" });
+    }
+
+    const startDate = moment({ year, month: month - 1, day: 1 }).startOf("day");
+    const endDate = moment(startDate).endOf("month");
+
+    const attendanceRecords = await Attendance.find({
+      user: userId,
+      date: { $gte: startDate.toDate(), $lte: endDate.toDate() },
     });
 
+    res.json(attendanceRecords);
+  } catch (err) {
+    console.error("❌ Error fetching attendance:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// 📝 Mark or update attendance for a day
+exports.markAttendance = async (req, res) => {
+  try {
+    const { date, status } = req.body;
+    const userId = req.user.id;
+
+    if (!date || !status) {
+      return res.status(400).json({ message: "Date and status required" });
+    }
+
+    const existing = await Attendance.findOne({ user: userId, date });
+
+    let record;
     if (existing) {
-      return res.status(400).json({ message: "Already clocked in today" });
+      existing.status = status;
+      record = await existing.save();
+    } else {
+      record = await Attendance.create({ user: userId, date, status });
     }
-
-    const attendance = await Attendance.create({
-      user: req.user.id,
-      clockIn: new Date(),
-      date: today,
-    });
-
-    res.json(attendance);
-  } catch (err) {
-    console.error("Clock In Error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-exports.clockOut = async (req, res) => {
-  try {
-    const today = moment().format("YYYY-MM-DD");
-    const record = await Attendance.findOne({ user: req.user.id, date: today });
-
-    if (!record || !record.clockIn) {
-      return res.status(400).json({ message: "You haven't clocked in yet" });
-    }
-
-    if (record.clockOut) {
-      return res.status(400).json({ message: "Already clocked out today" });
-    }
-
-    const now = new Date();
-    const totalWorked = now - record.clockIn;
-
-    record.clockOut = now;
-    record.totalWorked = totalWorked;
-    await record.save();
 
     res.json(record);
   } catch (err) {
-    console.error("Clock Out Error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-exports.getTodayStatus = async (req, res) => {
-  try {
-    const today = moment().format("YYYY-MM-DD");
-    const record = await Attendance.findOne({ user: req.user.id, date: today });
-    res.json(record);
-  } catch (err) {
-    console.error("Attendance Status Error:", err);
+    console.error("❌ Error marking attendance:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

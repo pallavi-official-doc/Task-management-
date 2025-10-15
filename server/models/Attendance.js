@@ -7,22 +7,27 @@ const attendanceSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    clockIn: {
-      type: Date,
-    },
-    clockOut: {
-      type: Date,
-    },
-    totalWorked: {
-      type: Number, // in milliseconds
-      default: 0,
-    },
     date: {
-      type: String, // store in YYYY-MM-DD format for easy query
+      type: Date,
       required: true,
+    },
+    status: {
+      type: String,
+      enum: [
+        "Present",
+        "Absent",
+        "Half Day",
+        "Late",
+        "Holiday",
+        "Day Off",
+        "On Leave",
+      ],
+      default: "Absent",
     },
   },
   { timestamps: true }
 );
+
+attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);
