@@ -11,7 +11,8 @@ const taskRoutes = require("./routes/tasks");
 const employeeRoutes = require("./routes/employees");
 const timesheetRoutes = require("./routes/timesheets");
 const leaveRoutes = require("./routes/leaves");
-
+const holidayRoutes = require("./routes/holidays");
+const appreciationRoutes = require("./routes/appreciation");
 dotenv.config();
 connectDB();
 
@@ -30,7 +31,7 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/timesheets", timesheetRoutes);
 app.use("/api/leaves", leaveRoutes);
-app.use("/api/holidays", require("./routes/holidays"));
-
+app.use("/api/holidays", holidayRoutes);
+app.use("/api/appreciations", appreciationRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server started on port ${PORT}`));

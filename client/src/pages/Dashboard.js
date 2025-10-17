@@ -478,6 +478,22 @@ const Dashboard = () => {
                       </span>
                     </Link>
                   </li>
+                  {/* 🏆 Appreciation  ✅ */}
+                  <li>
+                    <Link
+                      to="/dashboard/hr/appreciation"
+                      className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                        location.pathname.includes("hr/appreciation")
+                          ? "bg-primary text-white"
+                          : "text-dark"
+                      }`}
+                    >
+                      🏆
+                      <span className={sidebarOpen ? "" : "d-none"}>
+                        Appreciation
+                      </span>
+                    </Link>
+                  </li>
                 </ul>
               )}
             </li>

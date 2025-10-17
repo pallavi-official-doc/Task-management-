@@ -234,10 +234,11 @@ exports.getActiveTimer = async (req, res) => {
  */
 exports.getMyTimesheets = async (req, res) => {
   try {
-    const { user, start, end } = req.query; // 🟡 Added
+    const { user, start, end } = req.query;
 
     const query = {};
-    // 👤 Normal user → only own entries
+
+    // 👤 Non-admin → only own entries
     if (req.user.role !== "admin") {
       query.user = req.user.id;
     }
@@ -246,9 +247,16 @@ exports.getMyTimesheets = async (req, res) => {
       query.user = user;
     }
 
-    // 📅 Date range filter
+    // 📅 Date range filter (FIXED)
     if (start && end) {
-      query.startTime = { $gte: new Date(start), $lte: new Date(end) };
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      endDate.setHours(23, 59, 59, 999); // ✅ include entire end day
+
+      query.startTime = {
+        $gte: startDate,
+        $lte: endDate,
+      };
     }
 
     const entries = await Timesheet.find(query)
@@ -354,3 +362,5 @@ exports.getWeeklySummary = async (req, res) => {
     res.status(500).json({ message: "Failed to get weekly summary" });
   }
 };
+// 📅 Weekly Timesheet Controllers
+// 🟡 make sure you create this model

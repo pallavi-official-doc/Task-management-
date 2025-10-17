@@ -1,45 +1,3 @@
-// import React from "react";
-// import {
-//   BrowserRouter as Router,
-//   Routes,
-//   Route,
-//   Navigate,
-// } from "react-router-dom";
-// import { AuthProvider } from "./context/AuthContext";
-// import PrivateRoute from "./components/PrivateRoute";
-// import Login from "./pages/Login";
-// import Register from "./pages/Register";
-// import Dashboard from "./pages/Dashboard";
-// import Profile from "./pages/Profile";
-// import AllTasks from "./pages/AllTasks";
-// import CreateTask from "./pages/CreateTask";
-
-// function App() {
-//   return (
-//     <AuthProvider>
-//       <Router>
-//         <Routes>
-//           {/* Redirect "/" to dashboard or login */}
-//           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-//           {/* Public routes */}
-//           <Route path="/login" element={<Login />} />
-//           <Route path="/register" element={<Register />} />
-
-//           {/* Protected routes */}
-//           <Route element={<PrivateRoute />}>
-//             <Route path="/dashboard" element={<Dashboard />} />
-//             <Route path="/profile" element={<Profile />} />
-//             <Route path="/all-tasks" element={<AllTasks />} />
-//             <Route path="/create-task" element={<CreateTask />} />
-//           </Route>
-//         </Routes>
-//       </Router>
-//     </AuthProvider>
-//   );
-// }
-
-// export default App;
 import React from "react";
 import {
   BrowserRouter as Router,
@@ -51,6 +9,7 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
+
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -64,6 +23,7 @@ import TaskDetails from "./pages/TaskDetails";
 import Leaves from "./pages/hr/Leaves";
 import Attendance from "./pages/hr/Attendance";
 import Holiday from "./pages/hr/Holiday";
+import AppreciationPage from "./pages/hr/Appreciation"; // ✅ Import Appreciation
 
 function App() {
   return (
@@ -95,6 +55,9 @@ function App() {
               <Route path="hr/leaves" element={<Leaves />} />
               <Route path="hr/attendance" element={<Attendance />} />
               <Route path="hr/holiday" element={<Holiday />} />
+
+              {/* 🏆 Appreciation Page ✅ */}
+              <Route path="hr/appreciation" element={<AppreciationPage />} />
 
               {/* ⏱ Timesheet */}
               <Route path="timesheets" element={<Timesheet />} />

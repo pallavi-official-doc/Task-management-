@@ -4,6 +4,8 @@ import AuthContext from "../context/AuthContext";
 
 import moment from "moment";
 import { DashboardAPI } from "../api/api";
+import API from "../api/api";
+
 
 
 const DashboardHome = () => {
@@ -27,7 +29,20 @@ const DashboardHome = () => {
 const [weekTotal, setWeekTotal] = useState(0);// Active Day Data for progress bar
 const [activeDayData, setActiveDayData] = useState(null);
 const [durationPercent, setDurationPercent] = useState(0);
+ const [recentAwards, setRecentAwards] = useState([]);
 
+  useEffect(() => {
+    const fetchRecentAwards = async () => {
+      try {
+        const res = await API.get("/appreciations/recent");
+        setRecentAwards(res.data);
+      } catch (error) {
+        console.error("Error fetching recent awards:", error);
+      }
+    };
+
+    fetchRecentAwards();
+  }, []);
 
   // 🕒 Auto update time every 60s
   useEffect(() => {
@@ -213,6 +228,62 @@ useEffect(() => {
           </div>
         </div>
       </div>
+ {/* 🏆 Employee Appreciation Section */}
+<div className="dashboard-section mt-4">
+  <h5 className="mb-3 font-semibold">Employee Appreciations</h5>
+
+  {recentAwards.length === 0 ? (
+    <p>No appreciations available.</p>
+  ) : (
+    <div className="flex flex-col gap-2">
+      {recentAwards.map((award) => (
+        <div
+          key={award._id}
+          className="flex justify-between items-center p-2 bg-white shadow-sm rounded-lg"
+        >
+          {/* Left - Employee Info */}
+          <div className="flex items-center gap-2">
+            <img
+              src={award.givenTo?.profileImage || "/default-avatar.png"}
+              alt={award.givenTo?.name}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+            <div>
+              <div className="font-medium">{award.givenTo?.name}</div>
+              <div className="text-sm text-gray-500">
+                {award.givenTo?.designation}
+              </div>
+            </div>
+          </div>
+
+          {/* Right - Award Info */}
+          <div className="text-right">
+            <div className="font-semibold">{award.awardName}</div>
+            <div className="text-sm text-gray-400">
+              {new Date(award.givenOn).toLocaleDateString()}
+            </div>
+          </div>
+
+          {/* Trophy Icon */}
+          <div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="text-purple-500"
+              width="20"
+              height="20"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="M21 3h-3V2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v1H3a1 1 0 0 0-1 1v4a5 5 0 0 0 5 5h.17A7.001 7.001 0 0 0 11 18.93V21H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7.001 7.001 0 0 0 16.83 13H17a5 5 0 0 0 5-5V4a1 1 0 0 0-1-1zM6 11a3 3 0 0 1-3-3V5h3v6zm15-3a3 3 0 0 1-3 3V5h3v3z" />
+            </svg>
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+  
 
      {/* 📅 Weekly Timelogs */}
 <div className="row mb-4">
