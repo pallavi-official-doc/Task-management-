@@ -64,6 +64,7 @@ import TaskDetails from "./pages/TaskDetails";
 import Leaves from "./pages/hr/Leaves";
 import Attendance from "./pages/hr/Attendance";
 import Holiday from "./pages/hr/Holiday";
+
 function App() {
   return (
     <AuthProvider>
@@ -85,21 +86,15 @@ function App() {
               {/* 📁 Projects */}
               <Route path="projects" element={<Projects />} />
 
-              {/* ✅ Tasks (Main Page) */}
+              {/* ✅ Tasks */}
               <Route path="tasks" element={<Tasks />} />
-
-              {/* ✅ Task Details */}
               <Route path="tasks/:id" element={<TaskDetails />} />
-
-              {/* 📝 Create / Edit Task */}
               <Route path="create-task" element={<CreateTask />} />
 
               {/* 🟡 HR Section */}
-              <Route path="/dashboard/hr/leaves" element={<Leaves />} />
-
+              <Route path="hr/leaves" element={<Leaves />} />
               <Route path="hr/attendance" element={<Attendance />} />
-
-              <Route path="hr/holidays" element={<Holiday />} />
+              <Route path="hr/holiday" element={<Holiday />} />
 
               {/* ⏱ Timesheet */}
               <Route path="timesheets" element={<Timesheet />} />

@@ -25,13 +25,27 @@ const TimesheetSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // ⏳ Duration in seconds (easier to handle)
+    // ⏳ Duration in seconds
     duration: {
       type: Number,
-      default: 0, // store in SECONDS instead of ms
+      default: 0, // total worked time (excludes breaks)
     },
 
-    // 🏷 Notes or manual log info (optional, good for manual entries)
+    // ⏸ Total break time in seconds
+    break: {
+      type: Number,
+      default: 0, // total paused time
+    },
+
+    // ⏸ Array of pause sessions (optional, for detailed logs)
+    pauseLogs: [
+      {
+        start: { type: Date },
+        end: { type: Date },
+      },
+    ],
+
+    // 📝 Optional manual notes
     notes: {
       type: String,
       trim: true,
@@ -43,7 +57,9 @@ const TimesheetSchema = new mongoose.Schema(
 // 🔄 Auto-calc duration before save (if endTime is set)
 TimesheetSchema.pre("save", function (next) {
   if (this.startTime && this.endTime) {
-    this.duration = Math.floor((this.endTime - this.startTime) / 1000); // in seconds
+    const totalSeconds = Math.floor((this.endTime - this.startTime) / 1000);
+    const breakSeconds = this.break || 0;
+    this.duration = Math.max(totalSeconds - breakSeconds, 0);
   }
   next();
 });

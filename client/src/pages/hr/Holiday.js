@@ -3,23 +3,26 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import API from "../../api/api";
+import moment from "moment";
 import "@fortawesome/fontawesome-free/css/all.min.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 const Holiday = () => {
   const [events, setEvents] = useState([]);
   const [search, setSearch] = useState("");
-  const [showOptional, setShowOptional] = useState(false);
-  const [modalData, setModalData] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false); // Replace with AuthContext if needed
-  const currentYearRef = useRef(new Date().getFullYear());
 
-  // 📅 Generate Weekly Offs (Sundays)
+  const [modalData, setModalData] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const currentYearRef = useRef(new Date().getFullYear());
+  const searchTimeoutRef = useRef(null);
+
+  // 🩶 Generate Weekly Off (Sunday) events - purely for display
   const generateWeeklyOffs = (year) => {
     const offs = [];
     const start = new Date(year, 0, 1);
     const end = new Date(year, 11, 31);
     let current = new Date(start);
+
     while (current <= end) {
       if (current.getDay() === 0) {
         offs.push({
@@ -34,45 +37,41 @@ const Holiday = () => {
       }
       current.setDate(current.getDate() + 1);
     }
+
     return offs;
   };
 
-  // 🟦 Fetch Holidays from Backend + Government API + Weekly Offs
+  // 🟩 Fetch Holidays from backend + Weekly Offs + Gov
   const fetchAllHolidays = useCallback(
     async (year = new Date().getFullYear(), query = "") => {
       try {
-        const optionalParam = showOptional ? "&optional=true" : "";
-        const res = await API.get(
-          `/holidays?year=${year}&search=${query}${optionalParam}`
-        );
+        // ✅ Fetch company & optional holidays from backend
+        const res = await API.get(`/holidays?year=${year}&search=${query}`);
+        const backendHolidays = res.data.map((h) => {
+          let bg = "#1976d2"; // Company default
+          if (h.type === "government") bg = "#4caf50";
+          if (h.isOptional) bg = "#fbc02d";
 
-        // 🟦 Company / 🟨 Optional
-        const backendHolidays = res.data.map((h) => ({
-          id: h._id,
-          title: h.name,
-          start: h.date,
-          allDay: true,
-          backgroundColor: h.isOptional ? "#fbc02d" : "#1976d2",
-          borderColor: h.isOptional ? "#fbc02d" : "#1976d2",
-          borderStyle: h.isOptional ? "dashed" : "solid",
-          textColor: "#fff",
-          extendedProps: {
-            ...h,
-          },
-        }));
+          return {
+            id: h._id,
+            title: h.name,
+            start: h.date,
+            allDay: true,
+            backgroundColor: bg,
+            borderColor: bg,
+            textColor: "#fff",
+            extendedProps: h,
+          };
+        });
 
-        // 🩶 Weekly Off
+        // 🩶 Generate weekly offs (Sundays)
         const weeklyOffs = generateWeeklyOffs(year);
 
-        // 🟩 Government Holidays from Nager API
-        const governmentRes = await fetch(
-          `https://date.nager.at/api/v3/PublicHolidays/${year}/IN`
-        );
-        const governmentData = governmentRes.ok
-          ? await governmentRes.json()
-          : [];
-        const governmentHolidays = governmentData.map((h) => ({
-          title: h.localName || h.name,
+        // 🟩 Government Holidays (backend)
+        const govRes = await API.get(`/holidays/gov/${year}`);
+        const govData = govRes.data || [];
+        const governmentHolidays = govData.map((h) => ({
+          title: h.name,
           start: h.date,
           allDay: true,
           backgroundColor: "#4caf50",
@@ -80,36 +79,34 @@ const Holiday = () => {
           textColor: "#fff",
         }));
 
-        const combined = [
-          ...backendHolidays,
-          ...weeklyOffs,
-          ...governmentHolidays,
-        ];
-        setEvents(combined);
+        // ✅ Merge all events
+        setEvents([...backendHolidays, ...weeklyOffs, ...governmentHolidays]);
       } catch (err) {
         console.error("❌ Error fetching holidays", err);
       }
     },
-    [showOptional]
+    []
   );
 
-  // 🧠 On first load
+  // 🧠 On Mount
   useEffect(() => {
     fetchAllHolidays(currentYearRef.current);
-    // Replace this with AuthContext in real app
     const role = localStorage.getItem("userRole");
     setIsAdmin(role === "admin");
   }, [fetchAllHolidays]);
 
-  // 🔍 Search
+  // 🔍 Debounced Search
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearch(value);
-    fetchAllHolidays(currentYearRef.current, value);
+    clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchAllHolidays(currentYearRef.current, value);
+    }, 300);
   };
 
-  // 📅 Year change in calendar
-  const handleDatesSet = (arg) => {
+  // 📅 Handle Year Change in Calendar
+  const handleDatesSet = async (arg) => {
     const newYear = arg.start.getFullYear();
     if (newYear !== currentYearRef.current) {
       currentYearRef.current = newYear;
@@ -117,7 +114,7 @@ const Holiday = () => {
     }
   };
 
-  // 📌 Date Click → Create
+  // 📌 Admin: Date Click → Open Create Modal
   const handleDateClick = (arg) => {
     if (!isAdmin) return;
     setModalData({
@@ -132,7 +129,7 @@ const Holiday = () => {
     });
   };
 
-  // 📌 Event Click → Edit
+  // 📌 Admin: Event Click → Open Edit Modal
   const handleEventClick = (info) => {
     if (!isAdmin || !info.event.extendedProps?._id) return;
     setModalData({
@@ -141,12 +138,12 @@ const Holiday = () => {
     });
   };
 
-  // ✅ Save Holiday
+  // ✅ Save Holiday (Create or Update)
   const handleSaveHoliday = async () => {
     try {
       const payload = {
         name: modalData.name,
-        date: modalData.date,
+        date: moment(modalData.date).format("YYYY-MM-DD"),
         type: modalData.type,
         description: modalData.description,
         isRecurring: modalData.isRecurring,
@@ -180,24 +177,10 @@ const Holiday = () => {
 
   return (
     <div className="p-3">
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h3>Holiday Calendar</h3>
+
         <div className="d-flex gap-2 align-items-center">
-          <div className="form-check form-switch">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="optionalToggle"
-              checked={showOptional}
-              onChange={(e) => {
-                setShowOptional(e.target.checked);
-                fetchAllHolidays(currentYearRef.current, search);
-              }}
-            />
-            <label className="form-check-label" htmlFor="optionalToggle">
-              Show Optional
-            </label>
-          </div>
           <div className="input-group" style={{ maxWidth: "250px" }}>
             <input
               type="text"
@@ -207,6 +190,21 @@ const Holiday = () => {
               onChange={handleSearch}
             />
           </div>
+
+          {/* 🟤 Admin: Generate Weekly Offs */}
+          {isAdmin && (
+            <button
+              className="btn btn-outline-secondary btn-sm"
+              onClick={async () => {
+                await API.post("/holidays/generate-weekly-offs", {
+                  year: currentYearRef.current,
+                });
+                fetchAllHolidays(currentYearRef.current, search);
+              }}
+            >
+              <i className="fas fa-sync-alt me-1"></i> Generate Weekly Offs
+            </button>
+          )}
         </div>
       </div>
 
@@ -236,138 +234,20 @@ const Holiday = () => {
         />
       </div>
 
-      {/* Modal */}
+      {/* Modal for Admin Create/Edit */}
       {modalData && (
-        <div className="modal fade show d-block" tabIndex="-1">
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">
-                  {modalData.mode === "create" ? "Add Holiday" : "Edit Holiday"}
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setModalData(null)}
-                ></button>
-              </div>
-              <div className="modal-body">
-                <div className="mb-2">
-                  <label>Name</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={modalData.name}
-                    onChange={(e) =>
-                      setModalData({ ...modalData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="mb-2">
-                  <label>Date</label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={modalData.date?.substring(0, 10)}
-                    onChange={(e) =>
-                      setModalData({ ...modalData, date: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="mb-2">
-                  <label>Type</label>
-                  <select
-                    className="form-select"
-                    value={modalData.type}
-                    onChange={(e) =>
-                      setModalData({ ...modalData, type: e.target.value })
-                    }
-                  >
-                    <option value="company">Company</option>
-                    <option value="government">Government</option>
-                  </select>
-                </div>
-                <div className="form-check form-switch mb-2">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    checked={modalData.isOptional}
-                    onChange={(e) =>
-                      setModalData({
-                        ...modalData,
-                        isOptional: e.target.checked,
-                      })
-                    }
-                  />
-                  <label className="form-check-label">Optional Holiday</label>
-                </div>
-                <div className="form-check form-switch mb-2">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    checked={modalData.isRecurring}
-                    onChange={(e) =>
-                      setModalData({
-                        ...modalData,
-                        isRecurring: e.target.checked,
-                      })
-                    }
-                  />
-                  <label className="form-check-label">Recurring Holiday</label>
-                </div>
-                <div className="mb-2">
-                  <label>Location (optional)</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    value={modalData.location || ""}
-                    onChange={(e) =>
-                      setModalData({ ...modalData, location: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="mb-2">
-                  <label>Description (optional)</label>
-                  <textarea
-                    className="form-control"
-                    value={modalData.description || ""}
-                    onChange={(e) =>
-                      setModalData({
-                        ...modalData,
-                        description: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                {modalData.mode === "edit" && (
-                  <button
-                    className="btn btn-danger me-auto"
-                    onClick={handleDeleteHoliday}
-                  >
-                    <i className="fas fa-trash me-1"></i> Delete
-                  </button>
-                )}
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setModalData(null)}
-                >
-                  Cancel
-                </button>
-                <button className="btn btn-primary" onClick={handleSaveHoliday}>
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HolidayModal
+          modalData={modalData}
+          setModalData={setModalData}
+          onSave={handleSaveHoliday}
+          onDelete={handleDeleteHoliday}
+        />
       )}
     </div>
   );
 };
 
-// Small legend component
+// Legend Component
 const Legend = ({ color, label }) => (
   <div className="d-flex align-items-center gap-2">
     <span
@@ -375,6 +255,128 @@ const Legend = ({ color, label }) => (
       style={{ backgroundColor: color, width: "14px", height: "14px" }}
     ></span>
     <small>{label}</small>
+  </div>
+);
+
+// Admin Modal Component
+const HolidayModal = ({ modalData, setModalData, onSave, onDelete }) => (
+  <div className="modal fade show d-block" tabIndex="-1">
+    <div className="modal-dialog">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h5 className="modal-title">
+            {modalData.mode === "create" ? "Add Holiday" : "Edit Holiday"}
+          </h5>
+          <button
+            type="button"
+            className="btn-close"
+            onClick={() => setModalData(null)}
+          ></button>
+        </div>
+        <div className="modal-body">
+          <div className="mb-2">
+            <label>Name</label>
+            <input
+              type="text"
+              className="form-control"
+              value={modalData.name}
+              onChange={(e) =>
+                setModalData({ ...modalData, name: e.target.value })
+              }
+            />
+          </div>
+          <div className="mb-2">
+            <label>Date</label>
+            <input
+              type="date"
+              className="form-control"
+              value={modalData.date?.substring(0, 10)}
+              onChange={(e) =>
+                setModalData({ ...modalData, date: e.target.value })
+              }
+            />
+          </div>
+          <div className="mb-2">
+            <label>Type</label>
+            <select
+              className="form-select"
+              value={modalData.type}
+              onChange={(e) =>
+                setModalData({ ...modalData, type: e.target.value })
+              }
+            >
+              <option value="company">Company</option>
+              <option value="government">Government</option>
+            </select>
+          </div>
+          <div className="form-check form-switch mb-2">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              checked={modalData.isOptional}
+              onChange={(e) =>
+                setModalData({
+                  ...modalData,
+                  isOptional: e.target.checked,
+                })
+              }
+            />
+            <label className="form-check-label">Optional Holiday</label>
+          </div>
+          <div className="form-check form-switch mb-2">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              checked={modalData.isRecurring}
+              onChange={(e) =>
+                setModalData({
+                  ...modalData,
+                  isRecurring: e.target.checked,
+                })
+              }
+            />
+            <label className="form-check-label">Recurring Holiday</label>
+          </div>
+          <div className="mb-2">
+            <label>Location (optional)</label>
+            <input
+              type="text"
+              className="form-control"
+              value={modalData.location || ""}
+              onChange={(e) =>
+                setModalData({ ...modalData, location: e.target.value })
+              }
+            />
+          </div>
+          <div className="mb-2">
+            <label>Description (optional)</label>
+            <textarea
+              className="form-control"
+              value={modalData.description || ""}
+              onChange={(e) =>
+                setModalData({ ...modalData, description: e.target.value })
+              }
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          {modalData.mode === "edit" && (
+            <button className="btn btn-danger me-auto" onClick={onDelete}>
+              <i className="fas fa-trash me-1"></i> Delete
+            </button>
+          )}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setModalData(null)}
+          >
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={onSave}>
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 );
 

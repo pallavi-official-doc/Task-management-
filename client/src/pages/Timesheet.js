@@ -3,16 +3,26 @@ import API from "../api/api";
 import moment from "moment";
 import { Modal } from "react-bootstrap";
 import Select from "react-select"; // ✅ for searchable dropdown
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const Timesheet = () => {
   const [entries, setEntries] = useState([]);
   const [projects, setProjects] = useState([]);
-  // const [statuses, setStatuses] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedEntries, setSelectedEntries] = useState([]);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [activeTimer, setActiveTimer] = useState(null);
+
+  // 🟡 ADDED — Filters for admin
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState("all");
+
+  // 🟡 ADDED — Date range filter
+  const [dateRange, setDateRange] = useState([null, null]);
+  const [startDate, endDate] = dateRange;
+  const [showDateModal, setShowDateModal] = useState(false);
 
   // Filters
   const [showFilterPanel, setShowFilterPanel] = useState(false);
@@ -21,16 +31,46 @@ const Timesheet = () => {
   const [filterInvoice, setFilterInvoice] = useState("all");
 
   // 📡 Fetch timesheet entries
+  // const fetchEntries = useCallback(async () => {
+  //   try {
+  //     const res = await API.get("/timesheets");
+  //     setEntries(res.data);
+  //     const active = res.data.find((e) => e.task?.running === true);
+  //     setActiveTimer(active || null);
+  //   } catch (err) {
+  //     console.error("❌ Error fetching timesheet entries:", err);
+  //   }
+  // }, []);
+
+  // 📡 Fetch timesheet entries with filters
   const fetchEntries = useCallback(async () => {
     try {
-      const res = await API.get("/timesheets");
+      let url = "/timesheets";
+      const params = [];
+
+      if (selectedUser !== "all") {
+        params.push(`user=${selectedUser}`);
+      }
+      if (startDate && endDate) {
+        params.push(
+          `start=${moment(startDate).format("YYYY-MM-DD")}&end=${moment(
+            endDate
+          ).format("YYYY-MM-DD")}`
+        );
+      }
+
+      if (params.length) {
+        url += "?" + params.join("&");
+      }
+
+      const res = await API.get(url);
       setEntries(res.data);
       const active = res.data.find((e) => e.task?.running === true);
       setActiveTimer(active || null);
     } catch (err) {
       console.error("❌ Error fetching timesheet entries:", err);
     }
-  }, []);
+  }, [selectedUser, startDate, endDate]);
 
   // 📡 Fetch projects
   const fetchProjects = useCallback(async () => {
@@ -41,30 +81,50 @@ const Timesheet = () => {
       console.error("❌ Error fetching projects:", err);
     }
   }, []);
-
-  // // 📡 Fetch distinct statuses from backend
-  // const fetchStatuses = useCallback(async () => {
-  //   try {
-  //     const res = await API.get("/tasks/statuses");
-  //     // setStatuses(res.data || []);
-  //   } catch (err) {
-  //     console.error("❌ Error fetching statuses:", err);
-  //   }
-  // }, []);
+  // 🟡 ADDED — Fetch users (admin filter)
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await API.get("/users");
+      setUsers(res.data);
+    } catch (err) {
+      console.error("❌ Failed to fetch users", err);
+    }
+  }, []);
 
   useEffect(() => {
     fetchEntries();
     fetchProjects();
-    // fetchStatuses();
+    fetchUsers();
+
+    // 🕒 Background sync every 30s
     const interval = setInterval(fetchEntries, 30000);
     return () => clearInterval(interval);
-  }, [
-    fetchEntries,
-    fetchProjects,
-    //  fetchStatuses
-  ]);
+  }, [fetchEntries, fetchProjects]);
 
-  // ⏱ Timer Display
+  // ⏱ Live update display durations every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setEntries((prev) =>
+        prev.map((entry) => {
+          let displaySeconds = 0;
+          if (entry.startTime) {
+            const start = new Date(entry.startTime).getTime();
+            const end = entry.endTime
+              ? new Date(entry.endTime).getTime()
+              : entry.task?.running
+              ? Date.now()
+              : start;
+            displaySeconds = Math.floor((end - start) / 1000);
+          }
+          return { ...entry, displaySeconds };
+        })
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ⏱ Timer Display (top bar)
   const getActiveTimerDisplay = () => {
     if (!activeTimer) return "00:00:00";
     const start = new Date(activeTimer.startTime);
@@ -76,32 +136,48 @@ const Timesheet = () => {
     return `${h}:${m}:${s}`;
   };
 
-  // ⏱ Format Duration
-  const formatDuration = (start, end) => {
-    if (!start) return "--";
-    const endTime = end ? new Date(end) : new Date();
-    let diffMs = endTime - new Date(start);
-    if (diffMs < 0) diffMs = 0;
-    const diffMins = Math.floor(diffMs / 60000);
-    const h = Math.floor(diffMins / 60);
-    const m = diffMins % 60;
-    return h === 0 ? `${m}m` : `${h}h ${m}m`;
+  // ⏱ Format seconds to HH:mm:ss
+  const formatSeconds = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m
+      .toString()
+      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // 🧭 Entry Controls
+  const handleStart = async (entry) => {
+    try {
+      await API.put(`/tasks/${entry.task._id}/start`);
+      fetchEntries();
+    } catch (err) {
+      console.error("Error starting timer:", err);
+    }
+  };
+
+  const handlePause = async (entry) => {
+    try {
+      await API.put(`/tasks/${entry.task._id}/pause`);
+      fetchEntries();
+    } catch (err) {
+      console.error("Error pausing timer:", err);
+    }
+  };
+
+  const handleStop = async (entry) => {
+    try {
+      await API.put(`/tasks/${entry.task._id}/reset`);
+      fetchEntries();
+    } catch (err) {
+      console.error("Error stopping timer:", err);
+    }
   };
 
   // 👁 View
   const handleView = (entry) => {
     setSelectedEntry(entry);
     setShowModal(true);
-  };
-
-  // ⏹ Stop timer
-  const handleStop = async (entry) => {
-    try {
-      await API.put(`/tasks/${entry.task._id}/pause`);
-      fetchEntries();
-    } catch (err) {
-      console.error("Error stopping timer:", err);
-    }
   };
 
   // 🧠 Filter logic
@@ -146,78 +222,52 @@ const Timesheet = () => {
         </div>
       </div>
 
-      {/* Filter Row */}
-      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div className="d-flex align-items-center flex-wrap gap-2">
-          <span className="fw-semibold">Duration</span>
-          <input
-            type="date"
-            className="form-control"
-            style={{ width: "160px" }}
-          />
-          <span>to</span>
-          <input
-            type="date"
-            className="form-control"
-            style={{ width: "160px" }}
-          />
-
-          {/* Employee */}
-          <button className="btn btn-outline-secondary d-flex align-items-center gap-2">
-            <img
-              src="https://cdn-icons-png.flaticon.com/512/149/149071.png"
-              alt="avatar"
-              width="24"
-              height="24"
-              className="rounded-circle"
-            />
-            Pallavi Pawar
-            <span className="badge bg-light text-dark border ms-1">
-              It's You
-            </span>
-          </button>
-
-          {/* Search */}
-          <div className="input-group" style={{ width: "250px" }}>
-            <span className="input-group-text bg-white">
-              <i className="fas fa-search"></i>
-            </span>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Start typing to search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      {/* 🟡 Toolbar with Filters */}
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="d-flex align-items-center gap-3">
+          {/* 📅 Date range filter */}
+          <div
+            className="border rounded px-3 py-1 bg-light fw-bold"
+            style={{ cursor: "pointer" }}
+            onClick={() => setShowDateModal(true)}
+          >
+            {startDate && endDate
+              ? `${moment(startDate).format("DD-MM-YYYY")} To ${moment(
+                  endDate
+                ).format("DD-MM-YYYY")}`
+              : "Select Duration"}
           </div>
 
-          {/* Filters Button */}
-          <button
-            className="btn btn-outline-secondary d-flex align-items-center gap-1"
-            onClick={() => setShowFilterPanel(true)}
+          {/* 👥 Employee Filter (Admin) */}
+          <select
+            className="form-select"
+            style={{ width: "200px" }}
+            value={selectedUser}
+            onChange={(e) => setSelectedUser(e.target.value)}
           >
-            <i className="fas fa-filter"></i>
-            <span>Filters</span>
+            <option value="all">All Employees</option>
+            {users.map((u) => (
+              <option key={u._id} value={u._id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          {/* 🟡 ADDED — Clear Filters Button */}
+          <button
+            className="btn btn-outline-secondary"
+            disabled={selectedUser === "all" && !startDate && !endDate}
+            onClick={() => {
+              setSelectedUser("all");
+              setDateRange([null, null]);
+            }}
+          >
+            <i className="fas fa-times me-1"></i> Clear Filters
           </button>
         </div>
-      </div>
 
-      {/* Toolbar Row */}
-      <div className="d-flex justify-content-between align-items-center mb-2">
         <button className="btn btn-primary">
           <i className="fas fa-plus me-1"></i> Log Time
         </button>
-        <div className="d-flex gap-2">
-          <button className="btn btn-outline-dark active">
-            <i className="fas fa-list"></i>
-          </button>
-          <button className="btn btn-outline-dark">
-            <i className="fas fa-calendar-alt"></i>
-          </button>
-          <button className="btn btn-outline-dark">
-            <i className="fas fa-user"></i>
-          </button>
-        </div>
       </div>
 
       {/* Table */}
@@ -225,27 +275,12 @@ const Timesheet = () => {
         <table className="table align-middle mb-0">
           <thead>
             <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  checked={
-                    selectedEntries.length === entries.length &&
-                    entries.length > 0
-                  }
-                  onChange={(e) =>
-                    setSelectedEntries(
-                      e.target.checked ? entries.map((t) => t._id) : []
-                    )
-                  }
-                />
-              </th>
               <th>#</th>
-              <th>Code</th>
               <th>Task</th>
               <th>Employee</th>
-              <th>Start Time</th>
-              <th>End Time</th>
-              <th>Total Hours</th>
+              <th>Start</th>
+              <th>End</th>
+              <th>Duration</th>
               <th className="text-end">Action</th>
             </tr>
           </thead>
@@ -253,21 +288,7 @@ const Timesheet = () => {
             {filteredEntries.length > 0 ? (
               filteredEntries.map((entry, index) => (
                 <tr key={entry._id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selectedEntries.includes(entry._id)}
-                      onChange={() =>
-                        setSelectedEntries((prev) =>
-                          prev.includes(entry._id)
-                            ? prev.filter((id) => id !== entry._id)
-                            : [...prev, entry._id]
-                        )
-                      }
-                    />
-                  </td>
                   <td>{index + 1}</td>
-                  <td>{entry.task?.shortCode || "--"}</td>
                   <td
                     className="text-primary"
                     style={{ cursor: "pointer" }}
@@ -275,23 +296,22 @@ const Timesheet = () => {
                   >
                     {entry.task?.title || "--"}
                   </td>
-                  <td>{entry.user?.name || "--"}</td>
+                  <td>
+                    {entry.user?.name || (
+                      <i className="fas fa-user-circle text-secondary fs-5"></i>
+                    )}
+                  </td>
                   <td>
                     {moment(entry.startTime).format("DD-MM-YYYY hh:mm a")}
                   </td>
                   <td>
-                    {entry.task?.running ? (
-                      <span className="badge bg-primary">Active</span>
-                    ) : entry.endTime ? (
-                      <span className="badge bg-secondary">Paused</span>
-                    ) : (
-                      "--"
-                    )}
+                    {entry.endTime
+                      ? moment(entry.endTime).format("DD-MM-YYYY hh:mm a")
+                      : entry.task?.running
+                      ? "Running"
+                      : "--"}
                   </td>
-                  <td>
-                    {formatDuration(entry.startTime, entry.endTime)}{" "}
-                    <i className="fas fa-hourglass-half text-muted"></i>
-                  </td>
+                  <td>{formatSeconds(entry.displaySeconds || 0)}</td>
                   <td className="text-end">
                     <div className="dropdown">
                       <button
@@ -310,16 +330,7 @@ const Timesheet = () => {
                             <i className="fas fa-eye"></i> View
                           </button>
                         </li>
-                        {entry.task?.running && (
-                          <li>
-                            <button
-                              className="dropdown-item text-danger d-flex align-items-center gap-2"
-                              onClick={() => handleStop(entry)}
-                            >
-                              <i className="fas fa-stop"></i> Stop
-                            </button>
-                          </li>
-                        )}
+                        {/** Optional admin edit/delete actions here */}
                       </ul>
                     </div>
                   </td>
@@ -327,98 +338,13 @@ const Timesheet = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="9" className="text-center text-muted">
+                <td colSpan="6" className="text-center text-muted">
                   No timesheet entries found
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* Filter Panel */}
-      <div
-        className={`offcanvas offcanvas-end ${showFilterPanel ? "show" : ""}`}
-        tabIndex="-1"
-        style={{ visibility: showFilterPanel ? "visible" : "hidden" }}
-      >
-        <div className="offcanvas-header">
-          <h5 className="offcanvas-title">Filters</h5>
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setShowFilterPanel(false)}
-          ></button>
-        </div>
-        <div className="offcanvas-body">
-          {/* Project */}
-          <div className="mb-3">
-            <label className="form-label">Project</label>
-            <select
-              className="form-select"
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
-            >
-              <option value="all">All</option>
-              {projects.map((project) => (
-                <option key={project._id} value={project._id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* ✅ Status - React Select (Fixed Options) */}
-          <div className="mb-3">
-            <label className="form-label">Status</label>
-            <Select
-              options={[
-                { value: "all", label: "All" },
-                { value: "approved", label: "approved" },
-                { value: "pending", label: "Pending" },
-                { value: "active", label: "active" },
-              ]}
-              value={{
-                value: filterStatus,
-                label:
-                  filterStatus === "all"
-                    ? "All"
-                    : filterStatus.charAt(0).toUpperCase() +
-                      filterStatus.slice(1),
-              }}
-              onChange={(option) => setFilterStatus(option.value)}
-              isSearchable={false} // optional — you can set true if you want to search
-              placeholder="Select status..."
-              classNamePrefix="react-select"
-            />
-          </div>
-
-          {/* Invoice Generated */}
-          <div className="mb-3">
-            <label className="form-label">Invoice Generated</label>
-            <select
-              className="form-select"
-              value={filterInvoice}
-              onChange={(e) => setFilterInvoice(e.target.value)}
-            >
-              <option value="all">All</option>
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
-            </select>
-          </div>
-        </div>
-        <div className="offcanvas-footer border-top p-3 text-end">
-          <button
-            className="btn btn-outline-secondary"
-            onClick={() => {
-              setFilterProject("all");
-              setFilterStatus("all");
-              setFilterInvoice("all");
-            }}
-          >
-            Clear
-          </button>
-        </div>
       </div>
 
       {/* View Modal */}
@@ -433,9 +359,6 @@ const Timesheet = () => {
                 <strong>Task:</strong> {selectedEntry.task?.title}
               </p>
               <p>
-                <strong>Employee:</strong> {selectedEntry.user?.name}
-              </p>
-              <p>
                 <strong>Start:</strong>{" "}
                 {moment(selectedEntry.startTime).format("DD-MM-YYYY hh:mm a")}
               </p>
@@ -444,12 +367,12 @@ const Timesheet = () => {
                 {selectedEntry.endTime
                   ? moment(selectedEntry.endTime).format("DD-MM-YYYY hh:mm a")
                   : selectedEntry.task?.running
-                  ? "Active"
+                  ? "Running"
                   : "--"}
               </p>
               <p>
-                <strong>Total:</strong>{" "}
-                {formatDuration(selectedEntry.startTime, selectedEntry.endTime)}
+                <strong>Duration:</strong>{" "}
+                {formatSeconds(selectedEntry.displaySeconds || 0)}
               </p>
             </>
           )}

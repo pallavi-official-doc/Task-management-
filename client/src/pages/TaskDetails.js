@@ -1,4 +1,3 @@
-// src/pages/TaskDetails.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import API from "../api/api";
@@ -9,129 +8,81 @@ const TaskDetails = () => {
   const { id } = useParams();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerPaused, setTimerPaused] = useState(false);
   const [duration, setDuration] = useState(0);
-  const timerRef = useRef(null);
+  const intervalRef = useRef(null);
 
-  // 🕒 Restore timer state from localStorage on page load
-  useEffect(() => {
-    const savedTimer = localStorage.getItem(`task_timer_${id}`);
-    if (savedTimer) {
-      const data = JSON.parse(savedTimer);
-      setDuration(data.baseElapsed || 0);
-      if (data.isRunning) {
-        const now = Date.now();
-        const elapsed = Math.floor((now - data.startTime) / 1000);
-        setDuration(data.baseElapsed + elapsed);
-        setTimerRunning(true);
-        startInterval();
-      } else if (data.isPaused) {
-        setTimerPaused(true);
-      }
+  // 🟡 Fetch Task
+  const fetchTask = async () => {
+    try {
+      const res = await API.get(`/tasks/${id}`);
+      setTask(res.data);
+      setDuration(calculateDuration(res.data));
+    } catch (err) {
+      console.error("❌ Failed to fetch task", err);
+    } finally {
+      setLoading(false);
     }
-  }, [id]);
-
-  // ✅ Fetch task details from backend
-  useEffect(() => {
-    const fetchTask = async () => {
-      try {
-        const res = await API.get(`/tasks/${id}`);
-        setTask(res.data);
-
-        // If backend has stored timeSpent, sync it with local timer base
-        if (res.data.timeSpent) {
-          setDuration(res.data.timeSpent);
-        }
-      } catch (err) {
-        console.error("Failed to load task details", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTask();
-    return () => clearInterval(timerRef.current);
-  }, [id]);
-
-  // ⏱ Helper: start interval ticking
-  const startInterval = () => {
-    clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setDuration((prev) => prev + 1);
-    }, 1000);
   };
 
-  // 🟢 Start Timer
+  // 🧮 Calculate live duration based on task.running & lastStartedAt
+  const calculateDuration = (t) => {
+    if (!t) return 0;
+    let base = t.totalSeconds || 0;
+    if (t.running && t.lastStartedAt) {
+      const now = Date.now();
+      const started = new Date(t.lastStartedAt).getTime();
+      base += Math.floor((now - started) / 1000);
+    }
+    return base;
+  };
+
+  // ⏱ Live update every second
+  useEffect(() => {
+    fetchTask();
+
+    intervalRef.current = setInterval(() => {
+      setDuration((prev) => {
+        if (task?.running && task?.lastStartedAt) {
+          return calculateDuration(task);
+        }
+        return prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalRef.current);
+  }, [id, task?.running]);
+
+  // ▶ START Timer
   const handleStartTimer = async () => {
     try {
-      await API.put(`/tasks/${id}/start`);
-      setTimerRunning(true);
-      setTimerPaused(false);
-
-      const now = Date.now();
-      localStorage.setItem(
-        `task_timer_${id}`,
-        JSON.stringify({
-          isRunning: true,
-          isPaused: false,
-          startTime: now,
-          baseElapsed: duration,
-        })
-      );
-
-      startInterval();
+      await API.post(`/timesheets/start/${id}`);
+      fetchTask();
     } catch (err) {
-      console.error("Failed to start timer", err);
+      console.error("❌ Failed to start timer", err);
     }
   };
 
-  // ⏸ Pause Timer (optional)
+  // ⏸ PAUSE Timer
   const handlePauseTimer = async () => {
     try {
-      await API.put(`/tasks/${id}/pause`);
-      clearInterval(timerRef.current);
-      setTimerRunning(false);
-      setTimerPaused(true);
-
-      localStorage.setItem(
-        `task_timer_${id}`,
-        JSON.stringify({
-          isRunning: false,
-          isPaused: true,
-          baseElapsed: duration,
-        })
-      );
+      await API.put(`/timesheets/pause-by-task/${id}`);
+      fetchTask();
     } catch (err) {
-      console.error("Failed to pause timer", err);
+      console.error("❌ Failed to pause timer", err);
     }
   };
 
-  // ⏹ Stop Timer
-  const handleResetTimer = async () => {
+  // ⏹ STOP Timer
+  const handleStopTimer = async () => {
     try {
-      await API.put(`/tasks/${id}/reset`);
-      clearInterval(timerRef.current);
-      setTimerRunning(false);
-      setTimerPaused(false);
-      setDuration(0);
-
-      localStorage.removeItem(`task_timer_${id}`);
+      await API.put(`/timesheets/stop-by-task/${id}`);
+      fetchTask();
     } catch (err) {
-      console.error("Failed to reset timer", err);
+      console.error("❌ Failed to stop timer", err);
     }
   };
 
-  // ✅ Mark Complete
-  const handleMarkComplete = async () => {
-    try {
-      await API.put(`/tasks/${id}`, { status: "completed" });
-      setTask((prev) => ({ ...prev, status: "completed" }));
-    } catch (err) {
-      console.error("Failed to mark as complete", err);
-    }
-  };
-
-  // 🕒 Format seconds to HH:MM:SS
+  // 🕒 Format seconds → HH:mm:ss
   const formatTime = (secs) => {
     const h = Math.floor(secs / 3600);
     const m = Math.floor((secs % 3600) / 60);
@@ -150,48 +101,32 @@ const TaskDetails = () => {
 
       {/* Timer Controls */}
       <div className="d-flex align-items-center gap-2 mb-3">
-        {task.status !== "completed" && (
-          <button className="btn btn-success" onClick={handleMarkComplete}>
-            <i className="fas fa-check me-1"></i> Mark As Complete
-          </button>
-        )}
-
         <div className="border rounded px-3 py-1 bg-light fw-bold">
           ⏱ {formatTime(duration)}
         </div>
 
-        {!timerRunning && !timerPaused && (
+        {!task.running ? (
           <button
             className="btn btn-outline-primary"
             onClick={handleStartTimer}
           >
-            <i className="fas fa-play me-1"></i> Start Timer
+            <i className="fas fa-play me-1"></i> Start
           </button>
-        )}
-        {timerRunning && (
+        ) : (
           <button
             className="btn btn-outline-secondary"
             onClick={handlePauseTimer}
           >
-            <i className="fas fa-pause me-1"></i> Pause Timer
+            <i className="fas fa-pause me-1"></i> Pause
           </button>
         )}
-        {timerPaused && (
-          <button
-            className="btn btn-outline-primary"
-            onClick={handleStartTimer}
-          >
-            <i className="fas fa-play me-1"></i> Resume
-          </button>
-        )}
-        {(timerRunning || timerPaused) && (
-          <button className="btn btn-outline-danger" onClick={handleResetTimer}>
-            <i className="fas fa-stop me-1"></i> Stop Timer
-          </button>
-        )}
+
+        <button className="btn btn-outline-danger" onClick={handleStopTimer}>
+          <i className="fas fa-stop me-1"></i> Stop
+        </button>
       </div>
 
-      {/* Task Details */}
+      {/* Task Info */}
       <div className="row">
         <div className="col-md-8">
           <div className="card p-3 shadow-sm">
@@ -200,6 +135,10 @@ const TaskDetails = () => {
                 <tr>
                   <th>Project</th>
                   <td>{task.project?.name || "—"}</td>
+                </tr>
+                <tr>
+                  <th>Status</th>
+                  <td className="text-capitalize">{task.status}</td>
                 </tr>
                 <tr>
                   <th>Priority</th>
@@ -222,26 +161,6 @@ const TaskDetails = () => {
                   <td>{task.assignedTo?.name || "—"}</td>
                 </tr>
                 <tr>
-                  <th>Short Code</th>
-                  <td>—</td>
-                </tr>
-                <tr>
-                  <th>Milestones</th>
-                  <td>—</td>
-                </tr>
-                <tr>
-                  <th>Assigned By</th>
-                  <td>{task.createdBy?.name || "—"}</td>
-                </tr>
-                <tr>
-                  <th>Label</th>
-                  <td>—</td>
-                </tr>
-                <tr>
-                  <th>Task Category</th>
-                  <td>—</td>
-                </tr>
-                <tr>
                   <th>Description</th>
                   <td>{task.description || "—"}</td>
                 </tr>
@@ -252,23 +171,6 @@ const TaskDetails = () => {
 
         <div className="col-md-4">
           <div className="card p-3 shadow-sm">
-            <div className="d-flex align-items-center mb-2">
-              <span
-                className={`me-2 rounded-circle ${
-                  task.status === "completed"
-                    ? "bg-success"
-                    : task.status === "doing"
-                    ? "bg-info"
-                    : "bg-danger"
-                }`}
-                style={{ width: "10px", height: "10px" }}
-              ></span>
-              <strong className="text-capitalize">{task.status}</strong>
-            </div>
-            <p>
-              <strong>Created On:</strong>{" "}
-              {moment(task.createdAt).format("DD-MM-YYYY hh:mm a")}
-            </p>
             <p>
               <strong>Start Date:</strong>{" "}
               {task.startDate
@@ -280,7 +182,7 @@ const TaskDetails = () => {
               {task.dueDate ? moment(task.dueDate).format("DD-MM-YYYY") : "—"}
             </p>
             <p>
-              <strong>Hours Logged:</strong> {formatTime(duration)}
+              <strong>Total Logged:</strong> {formatTime(duration)}
             </p>
           </div>
         </div>

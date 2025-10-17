@@ -1,145 +1,51 @@
-// const Timesheet = require("../models/Timesheet");
-// const Task = require("../models/Task");
-
-// // ⏱ Start or Resume Timer
-// exports.startTimer = async (req, res) => {
-//   try {
-//     const { taskId } = req.body;
-
-//     // check if there's already a running timesheet for this task and user
-//     let existing = await Timesheet.findOne({
-//       user: req.user.id,
-//       task: taskId,
-//       endTime: null,
-//     });
-
-//     if (!existing) {
-//       existing = new Timesheet({
-//         user: req.user.id,
-//         task: taskId,
-//         startTime: new Date(),
-//       });
-//       await existing.save();
-//     }
-
-//     res.status(201).json(existing);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to start timer" });
-//   }
-// };
-
-// // ⏸ Pause Timer
-// exports.pauseTimer = async (req, res) => {
-//   try {
-//     const { id } = req.params; // timesheet id
-
-//     const timesheet = await Timesheet.findById(id);
-//     if (!timesheet) return res.status(404).json({ message: "Timesheet not found" });
-
-//     timesheet.endTime = new Date();
-//     timesheet.duration =
-//       (timesheet.duration || 0) +
-//       (timesheet.endTime.getTime() - timesheet.startTime.getTime()) / 1000;
-//     await timesheet.save();
-
-//     res.json(timesheet);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to pause timer" });
-//   }
-// };
-
-// // ⏹ Stop Timer (same as pause but finalize)
-// exports.stopTimer = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const timesheet = await Timesheet.findById(id);
-//     if (!timesheet) return res.status(404).json({ message: "Timesheet not found" });
-
-//     timesheet.endTime = new Date();
-//     timesheet.duration =
-//       (timesheet.duration || 0) +
-//       (timesheet.endTime.getTime() - timesheet.startTime.getTime()) / 1000;
-//     await timesheet.save();
-
-//     res.json(timesheet);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to stop timer" });
-//   }
-// };
-
-// // 📅 Get daily timesheets for logged-in user
-// exports.getMyTimesheets = async (req, res) => {
-//   try {
-//     const query = { user: req.user.id };
-
-//     if (req.query.date === "today") {
-//       const startOfDay = new Date();
-//       startOfDay.setHours(0, 0, 0, 0);
-//       const endOfDay = new Date();
-//       endOfDay.setHours(23, 59, 59, 999);
-
-//       query.startTime = { $gte: startOfDay, $lte: endOfDay };
-//     }
-
-//     const entries = await Timesheet.find(query)
-//       .populate("task")
-//       .populate("user", "name role");
-
-//     res.json(entries);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to fetch timesheets" });
-//   }
-// };
 const Timesheet = require("../models/Timesheet");
 const Task = require("../models/Task");
 
 /**
- * ⏱ Start or Resume Timer
- * POST /api/timesheets/start
+ * ▶ START or RESUME TIMER (by Task ID)
+ * POST /api/timesheets/start/:id
  */
 exports.startTimer = async (req, res) => {
   try {
-    const { taskId } = req.body;
+    const taskId = req.params.id;
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ msg: "Task not found" });
 
-    // Check if there's already a running timer for this user (any task)
-    const active = await Timesheet.findOne({
+    let activeTimesheet = await Timesheet.findOne({
+      task: taskId,
       user: req.user.id,
       endTime: null,
     });
 
-    if (active) {
-      return res
-        .status(400)
-        .json({ message: "You already have an active timer." });
+    // If timer is not already running
+    if (!task.running) {
+      task.running = true;
+      task.lastStartedAt = new Date();
+      await task.save();
+
+      if (!activeTimesheet) {
+        activeTimesheet = await Timesheet.create({
+          user: req.user.id,
+          task: taskId,
+          startTime: new Date(),
+        });
+      }
     }
 
-    // Create new timesheet entry
-    const newSheet = await Timesheet.create({
-      user: req.user.id,
-      task: taskId,
-      startTime: new Date(),
-    });
-
-    res.status(201).json(newSheet);
+    res.json({ task, timesheet: activeTimesheet });
   } catch (err) {
-    console.error("❌ startTimer error:", err);
-    res.status(500).json({ message: "Failed to start timer" });
+    console.error("❌ Error starting timer:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
 /**
- * ⏸ Pause Timer
+ * ⏸ Pause Timer (by Timesheet ID)
  * PUT /api/timesheets/pause/:id
  */
 exports.pauseTimer = async (req, res) => {
   try {
     const { id } = req.params;
-
     const timesheet = await Timesheet.findById(id);
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet not found" });
@@ -149,9 +55,7 @@ exports.pauseTimer = async (req, res) => {
     }
 
     const now = new Date();
-    const elapsed = (now.getTime() - timesheet.startTime.getTime()) / 1000;
-    timesheet.duration = (timesheet.duration || 0) + elapsed;
-    timesheet.endTime = now;
+    timesheet.pauseLogs.push({ start: now });
     await timesheet.save();
 
     res.json(timesheet);
@@ -162,13 +66,68 @@ exports.pauseTimer = async (req, res) => {
 };
 
 /**
- * ⏹ Stop Timer
+ * ⏸ Pause Timer (by Task ID)
+ * PUT /api/timesheets/pause-by-task/:taskId
+ */
+exports.pauseByTaskId = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const timesheet = await Timesheet.findOne({
+      task: taskId,
+      user: req.user.id,
+      endTime: null,
+    });
+
+    if (!timesheet) {
+      return res.status(404).json({ message: "No active timesheet found" });
+    }
+
+    const now = new Date();
+    timesheet.pauseLogs.push({ start: now });
+    await timesheet.save();
+
+    res.json(timesheet);
+  } catch (err) {
+    console.error("❌ pauseByTaskId error:", err);
+    res.status(500).json({ message: "Failed to pause by task" });
+  }
+};
+
+/**
+ * ▶️ Resume Timer (by Timesheet ID)
+ * PUT /api/timesheets/resume/:id
+ */
+exports.resumeTimer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const timesheet = await Timesheet.findById(id);
+    if (!timesheet) {
+      return res.status(404).json({ message: "Timesheet not found" });
+    }
+
+    const now = new Date();
+    const lastPause = timesheet.pauseLogs[timesheet.pauseLogs.length - 1];
+    if (lastPause && !lastPause.end) {
+      lastPause.end = now;
+      const breakSeconds = Math.floor((now - lastPause.start) / 1000);
+      timesheet.break += breakSeconds;
+      await timesheet.save();
+    }
+
+    res.json(timesheet);
+  } catch (err) {
+    console.error("❌ resumeTimer error:", err);
+    res.status(500).json({ message: "Failed to resume timer" });
+  }
+};
+
+/**
+ * ⏹ Stop Timer (by Timesheet ID)
  * PUT /api/timesheets/stop/:id
  */
 exports.stopTimer = async (req, res) => {
   try {
     const { id } = req.params;
-
     const timesheet = await Timesheet.findById(id);
     if (!timesheet) {
       return res.status(404).json({ message: "Timesheet not found" });
@@ -183,10 +142,56 @@ exports.stopTimer = async (req, res) => {
 
     await timesheet.save();
 
-    res.json(timesheet);
+    const task = await Task.findById(timesheet.task);
+    if (task) {
+      task.totalSeconds = Math.floor(timesheet.duration);
+      task.running = false;
+      task.lastStartedAt = null;
+      await task.save();
+    }
+
+    res.json({ timesheet, task });
   } catch (err) {
     console.error("❌ stopTimer error:", err);
     res.status(500).json({ message: "Failed to stop timer" });
+  }
+};
+
+/**
+ * ⏹ Stop Timer (by Task ID)
+ * PUT /api/timesheets/stop-by-task/:taskId
+ */
+exports.stopByTaskId = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const timesheet = await Timesheet.findOne({
+      task: taskId,
+      user: req.user.id,
+      endTime: null,
+    });
+
+    if (!timesheet) {
+      return res.status(404).json({ message: "No active timesheet found" });
+    }
+
+    const now = new Date();
+    const elapsed = (now - timesheet.startTime) / 1000;
+    timesheet.duration = (timesheet.duration || 0) + elapsed;
+    timesheet.endTime = now;
+    await timesheet.save();
+
+    const task = await Task.findById(taskId);
+    if (task) {
+      task.totalSeconds = Math.floor(timesheet.duration);
+      task.running = false;
+      task.lastStartedAt = null;
+      await task.save();
+    }
+
+    res.json({ timesheet, task });
+  } catch (err) {
+    console.error("❌ stopByTaskId error:", err);
+    res.status(500).json({ message: "Failed to stop timesheet by task" });
   }
 };
 
@@ -223,17 +228,27 @@ exports.getActiveTimer = async (req, res) => {
  * 📅 Get My Timesheets
  * GET /api/timesheets?date=today
  */
+/**
+ * 📅 Get My Timesheets (or all for Admin)
+ * GET /api/timesheets
+ */
 exports.getMyTimesheets = async (req, res) => {
   try {
-    const query = { user: req.user.id };
+    const { user, start, end } = req.query; // 🟡 Added
 
-    if (req.query.date === "today") {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date();
-      endOfDay.setHours(23, 59, 59, 999);
+    const query = {};
+    // 👤 Normal user → only own entries
+    if (req.user.role !== "admin") {
+      query.user = req.user.id;
+    }
+    // 👑 Admin → can filter by user
+    else if (user && user !== "all") {
+      query.user = user;
+    }
 
-      query.startTime = { $gte: startOfDay, $lte: endOfDay };
+    // 📅 Date range filter
+    if (start && end) {
+      query.startTime = { $gte: new Date(start), $lte: new Date(end) };
     }
 
     const entries = await Timesheet.find(query)
@@ -277,9 +292,8 @@ exports.getWeeklySummary = async (req, res) => {
   try {
     const now = new Date();
 
-    // Find Monday of this week
     const monday = new Date(now);
-    const day = monday.getDay(); // 0=Sun..6=Sat
+    const day = monday.getDay();
     const diff = (day + 6) % 7;
     monday.setDate(monday.getDate() - diff);
     monday.setHours(0, 0, 0, 0);
@@ -293,18 +307,48 @@ exports.getWeeklySummary = async (req, res) => {
       startTime: { $gte: monday, $lte: sunday },
     });
 
-    const perDay = [0, 0, 0, 0, 0, 0, 0]; // Mon..Sun
+    const perDay = Array(7)
+      .fill(null)
+      .map(() => ({
+        durationSeconds: 0,
+        breakSeconds: 0,
+      }));
+
     sheets.forEach((t) => {
       const end = t.endTime ? t.endTime : new Date();
-      const dur = Math.floor((end - t.startTime) / 1000);
+      const durationSeconds = Math.floor((end - t.startTime) / 1000);
       const d = new Date(t.startTime);
-      const idx = (d.getDay() + 6) % 7; // Mon=0 ... Sun=6
-      perDay[idx] += dur;
+      const idx = (d.getDay() + 6) % 7;
+
+      perDay[idx].durationSeconds += durationSeconds;
+      if (t.break) perDay[idx].breakSeconds += t.break * 60;
     });
 
-    const weekTotal = perDay.reduce((a, b) => a + b, 0);
+    const days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    const weeklySummary = days.map((dayLabel, i) => {
+      const durationMinutes = Math.floor(perDay[i].durationSeconds / 60);
+      const breakMinutes = Math.floor(perDay[i].breakSeconds / 60);
+      const hours = (durationMinutes / 60).toFixed(1);
 
-    res.json({ perDay, weekTotal });
+      const dayDate = new Date(monday);
+      dayDate.setDate(monday.getDate() + i);
+
+      return {
+        day: dayLabel,
+        duration: durationMinutes,
+        break: breakMinutes,
+        hours: Number(hours),
+        active: now.toDateString() === dayDate.toDateString(),
+      };
+    });
+
+    const weekTotalMinutes =
+      perDay.reduce((acc, cur) => acc + cur.durationSeconds, 0) / 60;
+
+    res.json({
+      weekTotal: Number((weekTotalMinutes / 60).toFixed(1)),
+      weeklySummary,
+    });
   } catch (err) {
     console.error("❌ getWeeklySummary error:", err);
     res.status(500).json({ message: "Failed to get weekly summary" });

@@ -383,7 +383,6 @@
 // };
 
 // export default TasksPage;
-
 import React, { useState, useEffect, useContext, useCallback } from "react";
 import API from "../api/api";
 import "@fortawesome/fontawesome-free/css/all.min.css";
@@ -399,7 +398,7 @@ const TasksPage = () => {
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [selectedTasks, setSelectedTasks] = useState([]); // ✅ for checkboxes
+  const [selectedTasks, setSelectedTasks] = useState([]);
   const navigate = useNavigate();
 
   const statusOptions = [
@@ -422,6 +421,57 @@ const TasksPage = () => {
   useEffect(() => {
     if (user) fetchTasks();
   }, [user, fetchTasks]);
+
+  // ⏱ Live update task timers every 1 second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTasks((prevTasks) =>
+        prevTasks.map((t) => {
+          let displaySeconds = t.totalSeconds || 0;
+          if (t.running && t.lastStartedAt) {
+            const started = new Date(t.lastStartedAt).getTime();
+            const now = Date.now();
+            displaySeconds += Math.floor((now - started) / 1000);
+          }
+          return { ...t, displaySeconds };
+        })
+      );
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ✅ Start / Pause / Stop handlers
+  // ✅ Start timer + Timesheet entry
+  // ✅ Start Timer → also starts Timesheet timer
+  const handleStart = async (taskId) => {
+    try {
+      await API.post(`/timesheets/start/${taskId}`);
+      fetchTasks(); // refresh table after starting
+    } catch (err) {
+      console.error("❌ Failed to start timer", err);
+    }
+  };
+
+  // ⏸ Pause Timer → pauses both Task & Timesheet
+  const handlePause = async (taskId) => {
+    try {
+      await API.put(`/timesheets/pause-by-task/${taskId}`);
+      fetchTasks();
+    } catch (err) {
+      console.error("❌ Failed to pause timer", err);
+    }
+  };
+
+  // ⏹ Stop Timer → finalizes Timesheet and updates Task totalSeconds
+  const handleStop = async (taskId) => {
+    try {
+      await API.put(`/timesheets/stop-by-task/${taskId}`);
+      fetchTasks();
+    } catch (err) {
+      console.error("❌ Failed to stop timer", err);
+    }
+  };
 
   // ✅ Checkbox handlers
   const handleCheckboxChange = (taskId) => {
@@ -450,27 +500,7 @@ const TasksPage = () => {
     }
   };
 
-  // ▶ Start Timer
-  const handleStartTimer = async (id) => {
-    try {
-      await API.put(`/tasks/${id}/start`);
-      fetchTasks();
-    } catch (err) {
-      console.error("❌ Start timer error", err);
-    }
-  };
-
-  // ⏸ Pause Timer
-  const handlePauseTimer = async (id) => {
-    try {
-      await API.put(`/tasks/${id}/pause`);
-      fetchTasks();
-    } catch (err) {
-      console.error("❌ Pause timer error", err);
-    }
-  };
-
-  // View
+  // 👁 View Task
   const handleTaskClick = async (id) => {
     try {
       const res = await API.get(`/tasks/${id}`);
@@ -481,12 +511,12 @@ const TasksPage = () => {
     }
   };
 
-  // Edit
+  // ✏ Edit
   const handleEdit = (task) => {
-    window.location.href = `/dashboard/create-task?id=${task._id}`;
+    navigate(`/dashboard/create-task?id=${task._id}`);
   };
 
-  // Delete
+  // 🗑 Delete
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this task?")) return;
     try {
@@ -497,14 +527,17 @@ const TasksPage = () => {
     }
   };
 
-  // Format elapsed time (HH:mm)
+  // 🕒 Format elapsed time
   const formatElapsed = (totalSeconds) => {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
-    return `${h}h ${m}m`;
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m
+      .toString()
+      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
-  // ✅ Filter + Search applied here
+  // ✅ Filter + Search
   const filteredTasks = tasks.filter((task) => {
     const matchesFilter = filter === "all" ? true : task.status === filter;
     const matchesSearch = task.title
@@ -519,7 +552,7 @@ const TasksPage = () => {
         <h2>{user?.role === "admin" ? "All Tasks" : "My Tasks"}</h2>
         <button
           className="btn btn-primary"
-          onClick={() => (window.location.href = "/dashboard/create-task")}
+          onClick={() => navigate("/dashboard/create-task")}
         >
           <i className="fas fa-plus me-1"></i> Add Task
         </button>
@@ -562,14 +595,12 @@ const TasksPage = () => {
                   onChange={handleSelectAll}
                 />
               </th>
-              <th>Code</th>
               <th>Task</th>
-              <th>Completed On</th>
               <th>Start Date</th>
               <th>Due Date</th>
-              <th>Estimated Time</th>
               <th>Hours Logged</th>
               <th>Assigned To</th>
+
               <th>Status</th>
               <th className="text-end">Action</th>
             </tr>
@@ -577,7 +608,9 @@ const TasksPage = () => {
           <tbody>
             {filteredTasks.length > 0 ? (
               filteredTasks.map((task) => {
-                const hoursLogged = formatElapsed(task.totalSeconds || 0);
+                const displayTime = formatElapsed(
+                  task.displaySeconds || task.totalSeconds || 0
+                );
 
                 return (
                   <tr key={task._id}>
@@ -589,26 +622,6 @@ const TasksPage = () => {
                       />
                     </td>
 
-                    <td>
-                      <button
-                        className={`btn btn-sm ${
-                          task.running ? "btn-warning" : "btn-outline-primary"
-                        }`}
-                        onClick={() =>
-                          task.running
-                            ? handlePauseTimer(task._id)
-                            : handleStartTimer(task._id)
-                        }
-                        title={task.running ? "Pause Timer" : "Start Timer"}
-                      >
-                        <i
-                          className={`fas ${
-                            task.running ? "fa-pause" : "fa-play"
-                          }`}
-                        ></i>
-                      </button>
-                    </td>
-
                     <td
                       style={{
                         cursor: "pointer",
@@ -617,44 +630,30 @@ const TasksPage = () => {
                       }}
                       onClick={() => navigate(`/dashboard/tasks/${task._id}`)}
                     >
-                      {task.title}{" "}
-                      {task.priority && (
-                        <span
-                          className={`badge bg-${
-                            task.priority === "high"
-                              ? "danger"
-                              : task.priority === "medium"
-                              ? "warning text-dark"
-                              : "secondary"
-                          } ms-1`}
-                        >
-                          {task.priority.charAt(0).toUpperCase() +
-                            task.priority.slice(1)}
-                        </span>
-                      )}
+                      {task.title}
                     </td>
 
-                    <td>{task.status === "completed" ? "Today" : "--"}</td>
-
-                    <td className="text-success">
-                      {moment(task.startDate).isValid()
+                    <td>
+                      {task.startDate
                         ? moment(task.startDate).format("DD MMM")
                         : "--"}
                     </td>
 
-                    <td className="text-success">
+                    <td>
                       {task.dueDate
                         ? moment(task.dueDate).format("DD MMM")
                         : "--"}
                     </td>
 
-                    <td>0s</td>
+                    <td className="text-danger">{displayTime}</td>
 
-                    <td className="text-danger">{hoursLogged}</td>
-
+                    {/* ✅ Assigned To */}
                     <td>
                       {task.assignedTo ? (
-                        <span>{task.assignedTo.name}</span>
+                        <div className="d-flex align-items-center gap-1">
+                          <i className="fas fa-user-circle text-secondary fs-5"></i>
+                          <span>{task.assignedTo.name}</span>
+                        </div>
                       ) : (
                         <i className="fas fa-user-circle text-secondary fs-5"></i>
                       )}
@@ -673,8 +672,10 @@ const TasksPage = () => {
                           type="button"
                           data-bs-toggle="dropdown"
                         >
-                          {statusOptions.find((s) => s.value === task.status)
-                            ?.label || "To Do"}
+                          {
+                            statusOptions.find((s) => s.value === task.status)
+                              ?.label
+                          }
                         </button>
                         <ul className="dropdown-menu">
                           {statusOptions.map((option) => (
@@ -743,7 +744,7 @@ const TasksPage = () => {
               })
             ) : (
               <tr>
-                <td colSpan="11" className="text-center text-muted">
+                <td colSpan="8" className="text-center text-muted">
                   No tasks found
                 </td>
               </tr>

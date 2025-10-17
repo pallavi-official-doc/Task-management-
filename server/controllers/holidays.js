@@ -160,3 +160,37 @@ exports.getUpcomingHolidays = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+// 🟤 Auto-generate weekly offs (e.g. Sundays)
+exports.generateWeeklyOffs = async (req, res) => {
+  try {
+    // Example: Generate holidays for all Sundays in a year
+    const { year } = req.body;
+    if (!year) return res.status(400).json({ message: "Year is required" });
+
+    const start = new Date(year, 0, 1);
+    const end = new Date(year, 11, 31);
+    const holidays = [];
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (d.getDay() === 0) {
+        holidays.push({
+          name: "Weekly Off",
+          date: new Date(d),
+          type: "company",
+          description: "Auto-generated weekly off (Sunday)",
+        });
+      }
+    }
+
+    // Bulk insert
+    await require("../models/Holiday").insertMany(holidays);
+
+    res.json({
+      message: `Weekly offs generated for ${year}`,
+      count: holidays.length,
+    });
+  } catch (err) {
+    console.error("❌ generateWeeklyOffs error:", err);
+    res.status(500).json({ message: "Failed to generate weekly offs" });
+  }
+};

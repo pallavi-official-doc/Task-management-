@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useCallback } from "react";
+
 import Select from "react-select";
 
 import API from "../api/api";
@@ -23,35 +24,30 @@ const Projects = () => {
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState("");
 
-  // 🧠 Fetch Projects
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const res = await API.get("/projects");
       setProjects(res.data);
     } catch (err) {
       console.error("Error fetching projects:", err);
     }
-  };
+  }, []);
 
-  // 👥 Fetch Team Users (Only users created by the logged-in user)
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
+    if (user?.role !== "admin") return;
+
     try {
-      const res = await API.get("/users/team"); // ✅ we'll make this route
+      const res = await API.get("/users/team");
       setUsers(res.data);
     } catch (err) {
       console.error("Failed to load users:", err);
       setError("Failed to load users.");
     }
-  };
-
+  }, [user?.role]);
   useEffect(() => {
     fetchProjects();
     fetchUsers();
-  }, []);
-
-  useEffect(() => {
-    console.log("Loaded team users:", users);
-  }, [users]);
+  }, [fetchProjects, fetchUsers]);
 
   // 🔍 Filter projects
   const filteredProjects = projects.filter((p) => {

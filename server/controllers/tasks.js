@@ -1,82 +1,3 @@
-// // controllers/tasks.js
-// const Task = require("../models/Task");
-
-// // Get tasks for logged-in user
-// exports.getTasks = async (req, res) => {
-//   try {
-//     // Only return tasks for this user and populate user info
-//     const tasks = await Task.find({ user: req.user.id }).populate("user");
-//     res.json(tasks);
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).send("Server Error");
-//   }
-// };
-// // Create a task
-// exports.createTask = async (req, res) => {
-//   const { title, description } = req.body;
-//   try {
-//     const task = new Task({
-//       title,
-//       description,
-//       status: "pending",
-//       user: req.user.id, // associate task with logged-in user
-//     });
-//     await task.save();
-//     res.status(201).json(task);
-//   } catch (err) {
-//     console.error(err.message);
-//     res.status(500).send("Server Error");
-//   }
-// };
-
-// // Get single task
-// exports.getTask = async (req, res) => {
-//   try {
-//     const task = await Task.findById(req.params.id);
-//     if (!task) return res.status(404).json({ msg: "Task not found" });
-//     res.status(200).json(task);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// // Update task
-// exports.updateTask = async (req, res) => {
-//   try {
-//     const task = await Task.findByIdAndUpdate(
-//       req.params.id,
-//       req.body,
-//       { new: true } // return updated task
-//     );
-//     if (!task) return res.status(404).json({ msg: "Task not found" });
-//     res.status(200).json(task);
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// // Delete task
-// exports.deleteTask = async (req, res) => {
-//   try {
-//     const task = await Task.findByIdAndDelete(req.params.id);
-//     if (!task) return res.status(404).json({ msg: "Task not found" });
-//     res.status(200).json({ msg: "Task deleted" });
-//   } catch (err) {
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// // Admin: get all tasks
-// exports.getAllTasksForAdmin = async (req, res) => {
-//   try {
-//     const tasks = await Task.find().populate("user", "name email");
-//     res.json(tasks);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ msg: "Server error" });
-//   }
-// };
 const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const Timesheet = require("../models/Timesheet");
@@ -160,7 +81,6 @@ exports.createTask = async (req, res) => {
     let { title, description, priority, dueDate, project, assignedTo } =
       req.body;
 
-    // 🧼 Sanitize ObjectIds
     if (!project) project = null;
     else if (typeof project === "string")
       project = new mongoose.Types.ObjectId(project);
@@ -169,7 +89,6 @@ exports.createTask = async (req, res) => {
     else if (typeof assignedTo === "string")
       assignedTo = new mongoose.Types.ObjectId(assignedTo);
 
-    // 📝 Create Task
     const task = await Task.create({
       title,
       description,
@@ -180,12 +99,7 @@ exports.createTask = async (req, res) => {
       user: req.user.id,
     });
 
-    // ⏱ Auto-create Timesheet entry for this task
-    await Timesheet.create({
-      user: req.user.id,
-      task: task._id,
-      startTime: new Date(),
-    });
+    // ⛔ No timesheet created here
 
     res.status(201).json(task);
   } catch (err) {
@@ -267,10 +181,16 @@ exports.startTimer = async (req, res) => {
     if (!task.running) {
       task.running = true;
       task.lastStartedAt = new Date();
+
+      // ✅ Move task from pending to doing if needed
+      if (task.status === "pending") {
+        task.status = "doing";
+      }
+
       await task.save();
     }
 
-    res.json(task);
+    res.json(task.toObject());
   } catch (err) {
     console.error("❌ Error starting timer:", err);
     res.status(500).json({ message: "Server error" });
@@ -280,21 +200,31 @@ exports.startTimer = async (req, res) => {
 /**
  * ⏸ Pause Task Timer
  */
+/**
+ * ⏸ Pause Task Timer
+ * PUT /api/tasks/:id/pause
+ */
 exports.pauseTimer = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
     if (!task) return res.status(404).json({ msg: "Task not found" });
 
     if (task.running) {
+      // Calculate elapsed seconds since lastStartedAt
       const now = new Date();
-      const diff = Math.floor((now - task.lastStartedAt) / 1000);
-      task.totalSeconds += diff;
+      if (task.lastStartedAt) {
+        const elapsed = Math.floor((now - task.lastStartedAt) / 1000);
+        task.totalSeconds = (task.totalSeconds || 0) + elapsed;
+      }
+
+      // Pause timer
       task.running = false;
       task.lastStartedAt = null;
+
       await task.save();
     }
 
-    res.json(task);
+    res.json(task.toObject());
   } catch (err) {
     console.error("❌ Error pausing timer:", err);
     res.status(500).json({ message: "Server error" });
@@ -304,6 +234,10 @@ exports.pauseTimer = async (req, res) => {
 /**
  * 🔄 Reset Timer
  */
+/**
+ * ⏹ Reset Task Timer
+ * PUT /api/tasks/:id/reset
+ */
 exports.resetTimer = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -312,15 +246,59 @@ exports.resetTimer = async (req, res) => {
     task.totalSeconds = 0;
     task.running = false;
     task.lastStartedAt = null;
+
+    // Optional: Reset status to pending when timer is reset
+    if (task.status !== "completed") {
+      task.status = "pending";
+    }
+
     await task.save();
 
-    res.json(task);
+    res.json(task.toObject());
   } catch (err) {
     console.error("❌ Error resetting timer:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
+/**
+ * ⏱ Log total time spent on a task (called from frontend when timer is paused or stopped)
+ * PUT /api/tasks/:id/log-time
+ */
+
+exports.logTime = async (req, res) => {
+  try {
+    const { timeSpent } = req.body;
+    const taskId = req.params.id;
+
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    // ✅ 1. Update Task totalSeconds
+    task.totalSeconds = timeSpent;
+    task.running = false;
+    task.lastStartedAt = null;
+    await task.save();
+
+    // ✅ 2. Find the ACTIVE timesheet for this task
+    const timesheet = await Timesheet.findOne({
+      task: taskId,
+      endTime: null,
+    }).sort({ startTime: -1 });
+
+    if (timesheet) {
+      const end = new Date();
+      timesheet.endTime = end;
+      timesheet.totalSeconds = timeSpent; // save duration in seconds if you store it
+      await timesheet.save();
+    }
+
+    res.json({ task, timesheet });
+  } catch (err) {
+    console.error("❌ Error logging time:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 /**
  * 👑 Admin: Get all tasks
  */
@@ -395,6 +373,42 @@ exports.getTaskStatuses = async (req, res) => {
     res.json(statuses);
   } catch (err) {
     console.error("❌ Error getting task statuses:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * 📅 Get Today's Tasks (with optional ?status=doing|pending|all)
+ * GET /api/tasks/today?status=doing
+ */
+exports.getTodayTasks = async (req, res) => {
+  try {
+    const statusQuery = (req.query.status || "doing").toLowerCase();
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // 👇 Status filter logic
+    let statusFilter = {};
+    if (statusQuery === "all") {
+      statusFilter = { status: { $in: ["doing", "pending"] } };
+    } else {
+      statusFilter = { status: statusQuery };
+    }
+
+    const tasks = await Task.find({
+      user: req.user.id,
+      ...statusFilter,
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+    })
+      .populate("project", "name code")
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (err) {
+    console.error("❌ Error fetching today's tasks:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

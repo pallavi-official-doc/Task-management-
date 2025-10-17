@@ -465,16 +465,16 @@ const Dashboard = () => {
                   {/* 📅 Holidays */}
                   <li>
                     <Link
-                      to="/dashboard/hr/holidays"
+                      to="/dashboard/hr/holiday"
                       className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
-                        location.pathname.includes("holidays")
+                        location.pathname.includes("hr/holiday")
                           ? "bg-primary text-white"
                           : "text-dark"
                       }`}
                     >
                       📅
                       <span className={sidebarOpen ? "" : "d-none"}>
-                        Holidays
+                        Holiday
                       </span>
                     </Link>
                   </li>

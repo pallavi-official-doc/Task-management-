@@ -2,35 +2,82 @@ const mongoose = require("mongoose");
 
 const HolidaySchema = new mongoose.Schema(
   {
-    name: { type: String, required: true }, // e.g., "Diwali"
-    date: { type: Date, required: true }, // e.g., 2025-10-29
+    // 📌 Title / Name of the holiday
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
+    // 📅 Actual date of holiday
+    date: {
+      type: Date,
+      required: true,
+      unique: true, // one holiday per date
+    },
+
+    // 🏷 Type of holiday
     type: {
       type: String,
-      enum: ["company", "government"],
+      enum: ["company", "government", "weekly_off"],
       default: "company",
     },
 
-    description: { type: String },
+    // 🌈 Used in FullCalendar and attendance table for color coding
+    color: {
+      type: String,
+      default: "#3788d8", // default blue for company holiday
+    },
 
-    // ✅ Repeats every year (e.g., Independence Day)
-    isRecurring: { type: Boolean, default: false },
+    description: {
+      type: String,
+      trim: true,
+    },
 
-    // ✅ Store MM-DD for recurring holidays (e.g., "08-15" for Aug 15)
-    yearlyDay: { type: String },
+    // ✅ Repeats every year (e.g., Independence Day on Aug 15)
+    isRecurring: {
+      type: Boolean,
+      default: false,
+    },
 
-    // ✅ Optional holiday (employee can choose to take or not)
-    isOptional: { type: Boolean, default: false },
+    // ✅ Store MM-DD for recurring holidays (e.g., "08-15")
+    yearlyDay: {
+      type: String,
+    },
 
-    // ✅ Useful if holidays differ by region or branch
-    location: { type: String },
+    // ✅ Optional holiday (e.g., employees can choose to take or not)
+    isOptional: {
+      type: Boolean,
+      default: false,
+    },
 
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // 🌍 Region / branch-specific holiday (optional)
+    location: {
+      type: String,
+    },
+
+    // 👑 Admin who created this holiday
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
   },
   { timestamps: true }
 );
 
-// 📅 Index on date to speed up upcoming holiday queries
+// 📅 Index on date for fast lookups
 HolidaySchema.index({ date: 1 });
+
+// 🧠 Pre-save hook to auto-assign color based on type
+HolidaySchema.pre("save", function (next) {
+  if (this.type === "government") {
+    this.color = "#dc3545"; // 🟥 red for government
+  } else if (this.type === "company") {
+    this.color = "#3788d8"; // 🟦 blue for company
+  } else if (this.type === "weekly_off") {
+    this.color = "#6c757d"; // 🟩 gray for weekly off
+  }
+  next();
+});
 
 module.exports = mongoose.model("Holiday", HolidaySchema);

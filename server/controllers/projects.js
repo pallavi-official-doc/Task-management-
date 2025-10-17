@@ -72,15 +72,19 @@ exports.getProjects = async (req, res) => {
     let filter = {};
 
     if (req.user.role !== "admin") {
-      filter = { $or: [{ createdBy: userId }, { members: userId }] };
+      filter = {
+        $or: [
+          { createdBy: userId },
+          { "members.userId": userId }, // ✅ FIXED
+        ],
+      };
     }
-    const projects = await Project.find(filter)
-      .populate("members", "name email") // ✅ must be here
-      .sort({ createdAt: -1 });
+
+    const projects = await Project.find(filter).sort({ createdAt: -1 });
 
     const response = projects.map((p) => ({
       ...p.toObject(),
-      status: p.computedStatus, // ✅ dynamic status
+      status: p.computedStatus, // dynamic status getter
     }));
 
     res.json(response);

@@ -4,56 +4,30 @@ const { protect } = require("../middleware/auth");
 const {
   startTimer,
   pauseTimer,
+  pauseByTaskId,
   stopTimer,
+  stopByTaskId,
+  resumeTimer,
   getMyTimesheets,
   getAllTimesheetsForAdmin,
-  getActiveTimer, // ✅ New
-  getWeeklySummary, // ✅ New
+  getActiveTimer,
+  getWeeklySummary,
 } = require("../controllers/timesheetController");
 
-// ✅ All routes require authentication
 router.use(protect);
 
-/**
- * @route   POST /api/timesheets/start
- * @desc    Start or resume a timer for a task
- */
-router.post("/start", startTimer);
-
-/**
- * @route   PUT /api/timesheets/pause/:id
- * @desc    Pause timer (don't delete timesheet entry)
- */
+router.post("/start/:id", startTimer);
 router.put("/pause/:id", pauseTimer);
-
-/**
- * @route   PUT /api/timesheets/stop/:id
- * @desc    Stop timer and finalize duration
- */
+router.put("/pause-by-task/:taskId", pauseByTaskId);
+router.put("/resume/:id", resumeTimer);
 router.put("/stop/:id", stopTimer);
-
-/**
- * @route   GET /api/timesheets/active
- * @desc    Get currently running timesheet (for floating timer)
- */
+router.put("/stop-by-task/:taskId", stopByTaskId);
 router.get("/active", getActiveTimer);
-
-/**
- * @route   GET /api/timesheets/weekly-summary
- * @desc    Get weekly summary of time logged for dashboard
- */
 router.get("/weekly-summary", getWeeklySummary);
-
-/**
- * @route   GET /api/timesheets
- * @desc    Get all timesheets for logged-in user
- */
 router.get("/", getMyTimesheets);
+router.put("/pause-by-task/:taskId", pauseByTaskId);
+router.put("/stop-by-task/:taskId", stopByTaskId);
 
-/**
- * @route   GET /api/timesheets/admin
- * @desc    (Optional) Get all timesheets for Admin dashboard
- */
 router.get("/admin", getAllTimesheetsForAdmin);
 
 module.exports = router;
