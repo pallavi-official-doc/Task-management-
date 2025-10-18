@@ -1,24 +1,47 @@
 const express = require("express");
 const router = express.Router();
-const { updateProfile, getTeamUsers } = require("../controllers/users");
+const {
+  updateProfile,
+  getOwnProfile,
+  getUserById,
+  deleteUser,
+  getAllUsers,
+  getTeamUsers,
+} = require("../controllers/userControllers");
 const { protect, authorize } = require("../middleware/auth");
-const User = require("../models/User");
 
-// 👤 Fetch all users (optional: could be admin-only)
-router.get("/", protect, async (req, res) => {
-  try {
-    const users = await User.find({}, "name email"); // only return name & email
-    res.json(users);
-  } catch (err) {
-    console.error("❌ Failed to fetch users:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
+// 🧩 Protect all routes
+router.use(protect);
 
-// 👥 Get team users created by the logged-in admin (used in Project Members dropdown)
-router.get("/team", protect, authorize("admin"), getTeamUsers);
+/* -------------------------------------------------------------------------- */
+/* 👤 User Routes (for self)                                                  */
+/* -------------------------------------------------------------------------- */
 
-// ✏️ Update user profile
-router.put("/profile", protect, updateProfile);
+// Get logged-in user's own profile
+// GET /api/users/profile
+router.get("/profile", getOwnProfile);
+
+// Update logged-in user's own profile
+// PUT /api/users/profile
+router.put("/profile", updateProfile);
+
+/* -------------------------------------------------------------------------- */
+/* 👑 Admin Routes                                                            */
+/* -------------------------------------------------------------------------- */
+
+// Get all users (Admin only)
+router.get("/", authorize("admin"), getAllUsers);
+
+// Get non-admin team users (Admin only)
+router.get("/team", authorize("admin"), getTeamUsers);
+
+// Get any user by ID (Admin only)
+router.get("/:id", authorize("admin"), getUserById);
+
+// Update any user by ID (Admin only)
+router.put("/:id", authorize("admin"), updateProfile);
+
+// Delete any user (Admin only)
+router.delete("/:id", authorize("admin"), deleteUser);
 
 module.exports = router;

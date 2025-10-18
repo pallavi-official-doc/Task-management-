@@ -1,104 +1,259 @@
-import React, { useEffect, useState, useContext, useCallback } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import AuthContext from "../../context/AuthContext";
 import API from "../../api/api";
+
+import "bootstrap/dist/css/bootstrap.min.css";
+import { Modal, Button, Form, Dropdown } from "react-bootstrap";
 
 const AppreciationPage = () => {
   const { user } = useContext(AuthContext);
   const [appreciations, setAppreciations] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState("");
-  const [awardName, setAwardName] = useState("");
+  const [employees, setEmployees] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    employee: "",
+    awardName: "",
+    date: "",
+    profession: "",
+  });
 
-  const isAdmin = user?.role === "admin";
-
-  // ✅ Wrap with useCallback
-  const fetchAppreciations = useCallback(async () => {
-    const endpoint = isAdmin ? "/appreciations" : "/appreciations/my";
-    const res = await API.get(endpoint);
-    setAppreciations(res.data);
-  }, [isAdmin]);
-
-  const fetchUsers = useCallback(async () => {
-    if (isAdmin) {
-      const res = await API.get("/users");
-      setUsers(res.data);
+  useEffect(() => {
+    fetchAwards();
+    if (user?.role === "admin" || user?.role === "hr") {
+      fetchEmployees();
     }
-  }, [isAdmin]);
+  }, [user?.role]); // 👈 add dependency here
+
+  const fetchAwards = async () => {
+    try {
+      const res = await API.get("/appreciations");
+      setAppreciations(res.data);
+    } catch (err) {
+      console.error("Error fetching appreciations:", err);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await API.get("/users"); // assuming /users returns employee list
+      setEmployees(res.data);
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!selectedUser || !awardName) return;
-    await API.post("/appreciations", {
-      givenTo: selectedUser,
-      awardName,
+    try {
+      await API.post("/appreciations", formData);
+      setShowModal(false);
+      fetchAwards();
+      setFormData({ employee: "", awardName: "", date: "", profession: "" });
+    } catch (err) {
+      console.error("Error creating award:", err);
+    }
+  };
+  const handleEdit = (award) => {
+    setShowModal(true);
+    setFormData({
+      employee: award.employee?._id || "",
+      awardName: award.awardName,
+      profession: award.profession,
+      date: award.date.split("T")[0],
     });
-    setSelectedUser("");
-    setAwardName("");
-    fetchAppreciations(); // ✅ will work fine
   };
 
-  useEffect(() => {
-    fetchAppreciations();
-    fetchUsers();
-  }, [fetchAppreciations, fetchUsers]); // ✅ clean dependency array
+  const handleDelete = async (id) => {
+    if (window.confirm("Are you sure you want to delete this award?")) {
+      try {
+        await API.delete(`/appreciations/${id}`);
+        fetchAwards();
+      } catch (err) {
+        console.error("Error deleting award:", err);
+      }
+    }
+  };
 
   return (
-    <div className="appreciation-container">
-      <h3>Appreciation</h3>
+    <div className="container mt-4">
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h4>Employee Awards</h4>
+        {user?.role === "admin" || user?.role === "hr" ? (
+          <Button variant="primary" onClick={() => setShowModal(true)}>
+            + Create Award
+          </Button>
+        ) : null}
+      </div>
 
-      {/* Admin-only Create Form */}
-      {isAdmin && (
-        <form className="create-appreciation-form" onSubmit={handleCreate}>
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-          >
-            <option value="">Select Employee</option>
-            {users.map((u) => (
-              <option key={u._id} value={u._id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="text"
-            placeholder="Award Name"
-            value={awardName}
-            onChange={(e) => setAwardName(e.target.value)}
-          />
-
-          <button type="submit">Create</button>
-        </form>
-      )}
-
-      {/* Appreciation Table */}
-      <table className="table table-striped">
-        <thead>
-          <tr>
-            <th>Given To</th>
-            <th>Award Name</th>
-            <th>Given On</th>
-          </tr>
-        </thead>
-        <tbody>
-          {appreciations.length > 0 ? (
-            appreciations.map((a) => (
-              <tr key={a._id}>
-                <td>{a.givenTo?.name}</td>
-                <td>{a.awardName}</td>
-                <td>{new Date(a.givenOn).toLocaleDateString()}</td>
-              </tr>
-            ))
-          ) : (
+      <div className="card p-3 shadow-sm">
+        {/* <table className="table table-striped">
+          <thead>
             <tr>
-              <td colSpan="3" style={{ textAlign: "center" }}>
-                No data available in table
-              </td>
+              <th>Given To</th>
+              <th>Award Name</th>
+              <th>Profession</th>
+              <th>Given On</th>
             </tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {appreciations.length === 0 ? (
+              <tr>
+                <td colSpan="4" className="text-center text-muted">
+                  No awards available
+                </td>
+              </tr>
+            ) : (
+              appreciations.map((award) => (
+                <tr key={award._id}>
+                  <td>{award.employee?.name}</td>
+                  <td>{award.awardName}</td>
+                  <td>{award.profession}</td>
+                  <td>{new Date(award.date).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table> */}
+        <table className="table table-striped">
+          <thead>
+            <tr>
+              <th>Given To</th>
+              <th>Award Name</th>
+              <th>Profession</th>
+              <th>Given On</th>
+              {/* 🟨 Add Action column header only for admin/hr */}
+              {user?.role === "admin" || user?.role === "hr" ? (
+                <th>Action</th>
+              ) : null}
+            </tr>
+          </thead>
+
+          <tbody>
+            {appreciations.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={
+                    user?.role === "admin" || user?.role === "hr" ? 5 : 4
+                  }
+                  className="text-center text-muted"
+                >
+                  No awards available
+                </td>
+              </tr>
+            ) : (
+              appreciations.map((award) => (
+                <tr key={award._id}>
+                  <td>{award.employee?.name}</td>
+                  <td>{award.awardName}</td>
+                  <td>{award.profession}</td>
+                  <td>{new Date(award.date).toLocaleDateString()}</td>
+
+                  {/* 🟨 Action dropdown only for admin/hr */}
+                  {user?.role === "admin" || user?.role === "hr" ? (
+                    <td>
+                      <Dropdown align="end">
+                        <Dropdown.Toggle
+                          variant="light"
+                          id={`dropdown-${award._id}`}
+                          className="border-0"
+                        >
+                          ⋮
+                        </Dropdown.Toggle>
+
+                        <Dropdown.Menu>
+                          <Dropdown.Item onClick={() => handleEdit(award)}>
+                            Edit
+                          </Dropdown.Item>
+                          <Dropdown.Item
+                            className="text-danger"
+                            onClick={() => handleDelete(award._id)}
+                          >
+                            Delete
+                          </Dropdown.Item>
+                        </Dropdown.Menu>
+                      </Dropdown>
+                    </td>
+                  ) : null}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Create Award Modal */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Create Award</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleCreate}>
+            <Form.Group className="mb-3">
+              <Form.Label>Employee</Form.Label>
+              <Form.Select
+                value={formData.employee}
+                onChange={(e) =>
+                  setFormData({ ...formData, employee: e.target.value })
+                }
+                required
+              >
+                <option value="">Select employee</option>
+                {employees.map((emp) => (
+                  <option key={emp._id} value={emp._id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Award Name</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Enter award name"
+                value={formData.awardName}
+                onChange={(e) =>
+                  setFormData({ ...formData, awardName: e.target.value })
+                }
+                required
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Profession</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Enter profession"
+                value={formData.profession}
+                onChange={(e) =>
+                  setFormData({ ...formData, profession: e.target.value })
+                }
+              />
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Date</Form.Label>
+              <Form.Control
+                type="date"
+                value={formData.date}
+                onChange={(e) =>
+                  setFormData({ ...formData, date: e.target.value })
+                }
+                required
+              />
+            </Form.Group>
+
+            <div className="text-end">
+              <Button variant="secondary" onClick={() => setShowModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" className="ms-2">
+                Save
+              </Button>
+            </div>
+          </Form>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 };

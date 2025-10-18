@@ -8,25 +8,31 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
-    // 📅 One record per day
+    // 📅 The specific work date
     date: {
       type: Date,
       required: true,
     },
 
-    // 🕓 Clock In time
+    // 🕒 Clock in time
     clockIn: {
       type: Date,
       default: null,
     },
 
-    // 🕔 Clock Out time
+    // 🕓 Clock out time
     clockOut: {
       type: Date,
       default: null,
     },
 
-    // 📌 Status (you can keep this for reporting)
+    // ⏱️ Total duration (in minutes)
+    totalDuration: {
+      type: Number,
+      default: 0,
+    },
+
+    // 📌 Attendance status
     status: {
       type: String,
       enum: [
@@ -44,7 +50,7 @@ const attendanceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// 🧠 Ensure unique record per user per day
+// 🚀 Ensure a user has only one attendance per date
 attendanceSchema.index({ user: 1, date: 1 }, { unique: true });
 
 module.exports = mongoose.model("Attendance", attendanceSchema);

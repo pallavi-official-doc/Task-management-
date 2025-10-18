@@ -13,7 +13,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import Profile from "./pages/Profile";
+
 import CreateTask from "./pages/CreateTask";
 import Timesheet from "./pages/Timesheet";
 import Projects from "./pages/Projects";
@@ -23,7 +23,11 @@ import TaskDetails from "./pages/TaskDetails";
 import Leaves from "./pages/hr/Leaves";
 import Attendance from "./pages/hr/Attendance";
 import Holiday from "./pages/hr/Holiday";
-import AppreciationPage from "./pages/hr/Appreciation"; // ✅ Import Appreciation
+import AppreciationPage from "./pages/hr/Appreciation";
+import ProfileSettings from "./pages/settings/ProfileSettings";
+
+// ✅ Import Notice Board Page
+import NoticeBoard from "./pages/NoticeBoard";
 
 function App() {
   return (
@@ -43,28 +47,25 @@ function App() {
               {/* 🏠 Dashboard Home */}
               <Route index element={<DashboardHome />} />
 
-              {/* 📁 Projects */}
-              <Route path="projects" element={<Projects />} />
-
-              {/* ✅ Tasks */}
-              <Route path="tasks" element={<Tasks />} />
-              <Route path="tasks/:id" element={<TaskDetails />} />
-              <Route path="create-task" element={<CreateTask />} />
-
-              {/* 🟡 HR Section */}
+              {/* 🧑‍💼 HR Section */}
               <Route path="hr/leaves" element={<Leaves />} />
               <Route path="hr/attendance" element={<Attendance />} />
               <Route path="hr/holiday" element={<Holiday />} />
-
-              {/* 🏆 Appreciation Page ✅ */}
               <Route path="hr/appreciation" element={<AppreciationPage />} />
 
-              {/* ⏱ Timesheet */}
+              {/* 💼 Work Section */}
+              <Route path="projects" element={<Projects />} />
+              <Route path="tasks" element={<Tasks />} />
+              <Route path="tasks/:id" element={<TaskDetails />} />
+              <Route path="create-task" element={<CreateTask />} />
               <Route path="timesheets" element={<Timesheet />} />
-            </Route>
 
-            {/* 👤 Profile */}
-            <Route path="/profile" element={<Profile />} />
+              {/* ⚙️ Settings Section */}
+              <Route path="settings/profile" element={<ProfileSettings />} />
+
+              {/* 📢 Notice Board Section */}
+              <Route path="notice-board" element={<NoticeBoard />} />
+            </Route>
           </Route>
 
           {/* 🚫 404 Fallback */}

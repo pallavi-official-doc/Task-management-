@@ -2,23 +2,27 @@ const mongoose = require("mongoose");
 
 const appreciationSchema = new mongoose.Schema(
   {
-    givenTo: {
+    employee: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: [true, "Employee is required"],
     },
     awardName: {
       type: String,
       required: true,
+      trim: true,
     },
-    givenOn: {
+    profession: {
+      type: String,
+      trim: true,
+    },
+    date: {
       type: Date,
-      default: Date.now,
+      required: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
   },
   { timestamps: true }

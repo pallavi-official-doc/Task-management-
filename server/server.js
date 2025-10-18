@@ -13,6 +13,8 @@ const timesheetRoutes = require("./routes/timesheets");
 const leaveRoutes = require("./routes/leaves");
 const holidayRoutes = require("./routes/holidays");
 const appreciationRoutes = require("./routes/appreciation");
+const noticeRoutes = require("./routes/noticeRoutes");
+
 dotenv.config();
 connectDB();
 
@@ -33,5 +35,7 @@ app.use("/api/timesheets", timesheetRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/holidays", holidayRoutes);
 app.use("/api/appreciations", appreciationRoutes);
+app.use("/api/notices", noticeRoutes);
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server started on port ${PORT}`));

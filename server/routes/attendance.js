@@ -13,11 +13,11 @@ router.use(protect);
 // 📅 Get today's attendance (Dashboard)
 router.get("/today", getAttendance);
 
-// 🟢 Clock In
-router.post("/", clockIn);
+// 🟢 Clock In ✅ FIXED PATH
+router.post("/clock-in", clockIn);
 
-// 🔴 Clock Out
-router.post("/clockout", clockOut);
+// 🔴 Clock Out ✅ FIXED PATH
+router.post("/clock-out", clockOut);
 
 // 📊 Monthly summary (React Attendance page)
 router.get("/", getMonthlyAttendanceSummary);

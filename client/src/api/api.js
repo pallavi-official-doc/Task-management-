@@ -21,8 +21,8 @@ export const DashboardAPI = {
 
   // 🟢 Attendance APIs
   getAttendanceStatus: () => API.get("/attendance/today"), // ✅ Today's record
-  clockIn: () => API.post("/attendance"), // ✅ Clock In
-  clockOut: () => API.post("/attendance/clockout"), // ✅ Clock Out
+  clockIn: () => API.post("/attendance/clock-in"), // ✅ updated
+  clockOut: () => API.post("/attendance/clock-out"),
 
   // 📅 Tasks
   getTodayTasks: (status = "doing") => API.get(`/tasks/today?status=${status}`),
