@@ -73,4 +73,33 @@ router.put("/:id", authorize("admin"), updateProject);
 // 🗑 Delete a project (Admin only)
 router.delete("/:id", authorize("admin"), deleteProject);
 
+// ✅ Get project members (for ticket assignment)
+router.get("/:id/members", async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id).populate({
+      path: "members.userId",
+      select: "name email role",
+    });
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found" });
+    }
+
+    // ✅ Send formatted list
+    const members = project.members
+      .filter((m) => m.userId)
+      .map((m) => ({
+        userId: m.userId._id,
+        name: m.userId.name,
+        email: m.userId.email,
+        role: m.userId.role,
+      }));
+
+    res.json(members);
+  } catch (err) {
+    console.error("FETCH PROJECT MEMBERS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;

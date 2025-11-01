@@ -15,19 +15,12 @@ API.interceptors.request.use((req) => {
 
 // Dashboard API helpers
 export const DashboardAPI = {
-  // 📊 Dashboard widgets
+  clockIn: () => API.post("/attendance/clock-in"),
+  clockOut: () => API.post("/attendance/clock-out"),
+  getAttendanceStatus: () => API.get("/attendance/status"),
   getTaskSummary: () => API.get("/tasks/summary"),
   getProjectSummary: () => API.get("/projects/summary"),
-
-  // 🟢 Attendance APIs
-  getAttendanceStatus: () => API.get("/attendance/today"), // ✅ Today's record
-  clockIn: () => API.post("/attendance/clock-in"), // ✅ updated
-  clockOut: () => API.post("/attendance/clock-out"),
-
-  // 📅 Tasks
-  getTodayTasks: (status = "doing") => API.get(`/tasks/today?status=${status}`),
-
-  // ⏱ Weekly Timelogs
+  getTodayTasks: (status) => API.get(`/tasks/today?status=${status}`),
   getWeeklyTimelogs: () => API.get("/timesheets/weekly-summary"),
 };
 

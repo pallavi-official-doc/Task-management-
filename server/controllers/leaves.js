@@ -189,3 +189,36 @@ exports.deleteLeave = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+// @desc    Update leave (admin or user)
+// @route   PUT /leaves/:id
+// @access  Private
+exports.updateLeave = async (req, res) => {
+  try {
+    const leaveId = req.params.id;
+    const updateData = {
+      type: req.body.type,
+      duration: req.body.duration,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate || null,
+      reason: req.body.reason,
+    };
+
+    // Optional: Validate fields
+    if (!updateData.type || !updateData.startDate) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const leave = await Leave.findByIdAndUpdate(leaveId, updateData, {
+      new: true,
+    });
+
+    if (!leave) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
+
+    res.status(200).json({ message: "Leave updated successfully", leave });
+  } catch (error) {
+    console.error("❌ Error updating leave:", error);
+    res.status(500).json({ message: "Failed to update leave" });
+  }
+};

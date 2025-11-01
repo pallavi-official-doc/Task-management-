@@ -14,7 +14,17 @@ const Timesheet = require("../models/Timesheet");
 exports.getTasks = async (req, res) => {
   try {
     const { status, overdue, startDate, endDate, search, limit } = req.query;
-    const filter = { user: req.user.id };
+
+    // ✅ Modified Filter: Include both created and assigned tasks
+    const filter =
+      req.user.role === "admin"
+        ? {} // Admin can see all tasks
+        : {
+            $or: [
+              { user: req.user.id }, // Tasks created by the user
+              { assignedTo: req.user.id }, // Tasks assigned to the user
+            ],
+          };
 
     // ✅ Status filter
     if (status && status !== "all") {
@@ -37,6 +47,7 @@ exports.getTasks = async (req, res) => {
     // ✅ Text search (title + description)
     if (search) {
       filter.$or = [
+        ...(filter.$or || []), // preserve previous $or (user/assignedTo)
         { title: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
       ];
@@ -142,12 +153,23 @@ exports.updateTask = async (req, res) => {
     else if (typeof data.assignedTo === "string")
       data.assignedTo = new mongoose.Types.ObjectId(data.assignedTo);
 
+    const existingTask = await Task.findById(req.params.id);
+    if (!existingTask) return res.status(404).json({ msg: "Task not found" });
+
+    // ✅ Preserve fields that are not sent in the request
+    if (data.assignedTo === undefined || data.assignedTo === null)
+      data.assignedTo = existingTask.assignedTo;
+
+    if (data.project === undefined || data.project === null)
+      data.project = existingTask.project;
+
+    if (data.priority === undefined || data.priority === null)
+      data.priority = existingTask.priority;
+
+    // 🧠 Update the task safely
     const updated = await Task.findByIdAndUpdate(req.params.id, data, {
       new: true,
     });
-
-    if (!updated) return res.status(404).json({ msg: "Task not found" });
-
     res.json(updated);
   } catch (err) {
     console.error("❌ Error updating task:", err);
@@ -322,14 +344,19 @@ exports.getAllTasksForAdmin = async (req, res) => {
  */
 exports.getTaskSummary = async (req, res) => {
   try {
-    const userId = req.user.id;
+    // ✅ Define userId properly from authenticated user
+    const userId = req.user._id; // comes from your auth middleware (protect)
 
+    // ✅ Build user filter
+    const userFilter = { $or: [{ user: userId }, { assignedTo: userId }] };
+
+    // ✅ Count tasks by status
     const [pending, doing, completed, overdue] = await Promise.all([
-      Task.countDocuments({ user: userId, status: "pending" }),
-      Task.countDocuments({ user: userId, status: "doing" }),
-      Task.countDocuments({ user: userId, status: "completed" }),
+      Task.countDocuments({ ...userFilter, status: "pending" }),
+      Task.countDocuments({ ...userFilter, status: "doing" }),
+      Task.countDocuments({ ...userFilter, status: "completed" }),
       Task.countDocuments({
-        user: userId,
+        ...userFilter,
         dueDate: { $lt: new Date() },
         status: { $ne: "completed" },
       }),

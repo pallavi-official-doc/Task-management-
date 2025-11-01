@@ -439,9 +439,9 @@
 // };
 
 // export default DashboardHome;
-import React, { useEffect, useState, useContext, useCallback } from "react";
+import React, { useEffect, useState, useContext, useCallback,useRef  } from "react";
 // import { getAwardIcon } from "../utils/awardIcons";
-
+import { socket } from "../socket";
 import AuthContext from "../context/AuthContext";
 
 import moment from "moment";
@@ -452,6 +452,13 @@ import API from "../api/api";
 
 const DashboardHome = () => {
   const { user } = useContext(AuthContext);
+    useEffect(() => {
+    if (user?._id) {
+      socket.emit("addUser", user._id);
+    }
+  }, [user]);
+  const intervalRef = useRef(null);
+
 
   // 📌 States
   const [taskSummary, setTaskSummary] = useState({
@@ -466,6 +473,14 @@ const DashboardHome = () => {
   });
   const [todayTasks, setTodayTasks] = useState([]);
   const [attendance, setAttendance] = useState(null);
+
+  // 🔶 Added proper clock-in tracker state
+  const [isClockedIn, setIsClockedIn] = useState(false);
+  // ✅ Local state to sync with other pages (like Tasks)
+const [attendanceStatus, setAttendanceStatus] = useState(
+  localStorage.getItem("attendanceStatus") || "out"
+);
+
   const [now, setNow] = useState(new Date()); // 🕒 Auto-updating clock
   const [weeklyLogs, setWeeklyLogs] = useState([]); // 📅 Weekly Timelog
 const [weekTotal, setWeekTotal] = useState(0);// Active Day Data for progress bar
@@ -492,6 +507,10 @@ const [elapsedTime, setElapsedTime] = useState(0); // time in seconds
     return () => clearInterval(interval);
   }, []);
 
+useEffect(() => {
+  const status = localStorage.getItem("attendanceStatus");
+  if (status === "in") setIsClockedIn(true);
+}, []);
 
   useEffect(() => {
   const fetchUserProfile = async () => {
@@ -510,80 +529,132 @@ const [elapsedTime, setElapsedTime] = useState(0); // time in seconds
  // 📡 Fetch dashboard data
 const fetchDashboardData = useCallback(async () => {
   try {
-    const [
-      taskRes,
-      projectRes,
-      attRes,
-      todayRes,
-      weekLogRes
-    ] = await Promise.all([
+    const [taskRes, projectRes, attRes, todayRes, weekLogRes] = await Promise.all([
       DashboardAPI.getTaskSummary(),
       DashboardAPI.getProjectSummary(),
       DashboardAPI.getAttendanceStatus(),
-     DashboardAPI.getTodayTasks("all"), 
-      
-      DashboardAPI.getWeeklyTimelogs(), 
-        // 👉 calls /timesheets/weekly-summary
+      DashboardAPI.getTodayTasks("all"),
+      DashboardAPI.getWeeklyTimelogs(),
     ]);
 
     setTaskSummary(taskRes.data);
     setProjectSummary(projectRes.data);
     setAttendance(attRes.data);
+
+    // ✅ FIX HERE
+    const clockedIn = attRes.data?.clockIn && !attRes.data?.clockOut;
+    setIsClockedIn(clockedIn);
+    setAttendanceStatus(clockedIn ? "in" : "out");
+
     setTodayTasks(todayRes.data);
-
-    // 🆕 Handle weekly summary structure
     setWeeklyLogs(weekLogRes.data.weeklySummary || []);
-    setWeekTotal(weekLogRes.data.weekTotal || 0); // optional if you want total
-
+    setWeekTotal(weekLogRes.data.weekTotal || 0);
   } catch (err) {
     console.error("Dashboard data fetch error", err);
   }
 }, []);
 
 
+
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
+
+  // 🔶 Updated Clock In
+ // ✅ CLOCK IN HANDLER
+// ✅ CLOCK IN
 const handleClockIn = async () => {
   try {
     console.log("🟡 Clock In button clicked");
     const res = await DashboardAPI.clockIn();
     console.log("🟢 Clock In success:", res.data);
+
+    setAttendance(res.data.attendance || res.data);
+    setIsClockedIn(true);
+    setElapsedTime(0);
+
+    // ✅ Update localStorage so other pages (like Tasks) detect it
+    localStorage.setItem("attendanceStatus", "in");
+    window.dispatchEvent(new Event("storage")); // ✅ notify other tabs/components
+
     fetchDashboardData();
   } catch (err) {
-    console.error("❌ Clock In failed", err);
+    const msg = err.response?.data?.message;
+    if (msg?.includes("Already clocked in")) {
+      alert("⚠️ You are already clocked in.");
+      setIsClockedIn(true);
+      localStorage.setItem("attendanceStatus", "in");
+      window.dispatchEvent(new Event("storage"));
+      fetchDashboardData();
+    } else {
+      console.error("❌ Clock In failed:", err.response?.data || err.message);
+      alert("Clock In failed. Please try again.");
+    }
   }
 };
 
+
+// ✅ CLOCK OUT
 const handleClockOut = async () => {
   try {
-    await DashboardAPI.clockOut();
+    console.log("🔴 Clock Out button clicked");
+    const res = await DashboardAPI.clockOut();
+    console.log("🟢 Clock Out success:", res.data);
+
+    setAttendance(res.data.attendance || res.data);
+    setIsClockedIn(false);
+    setElapsedTime(0);
+
+    // ✅ Update localStorage and notify other components
+    localStorage.setItem("attendanceStatus", "out");
+    window.dispatchEvent(new Event("storage"));
+
     fetchDashboardData();
   } catch (err) {
-    console.error("Clock Out failed", err);
+    console.error("Clock Out failed:", err.response?.data || err.message);
+    alert("Clock Out failed. Try again.");
   }
 };
-// 🕒 Live Timer effect
 useEffect(() => {
-  let interval;
+  const handleStorageChange = () => {
+    const updatedStatus = localStorage.getItem("attendanceStatus") || "out";
+    setAttendanceStatus(updatedStatus);
+  };
+  window.addEventListener("storage", handleStorageChange);
+  return () => window.removeEventListener("storage", handleStorageChange);
+}, []);
 
-  if (attendance?.clockIn && !attendance?.clockOut) {
-    // calculate already elapsed time since clockIn
-    const initialElapsed =
-      (new Date() - new Date(attendance.clockIn)) / 1000;
-    setElapsedTime(initialElapsed);
 
-    // start interval to keep timer running
-    interval = setInterval(() => {
+// 🕒 Timer effect (syncs if page reloads mid-session)
+useEffect(() => {
+  if (intervalRef.current) {
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  }
+
+  if (isClockedIn && attendance?.clockIn && !attendance?.clockOut) {
+    const initial = Math.floor((Date.now() - new Date(attendance.clockIn)) / 1000);
+    setElapsedTime(initial);
+
+    intervalRef.current = setInterval(() => {
       setElapsedTime((prev) => prev + 1);
     }, 1000);
   } else {
     setElapsedTime(0);
   }
 
-  return () => clearInterval(interval);
-}, [attendance]);
+  return () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  };
+}, [isClockedIn, attendance]);
+
+
+
+
 
 const handleActiveDay = useCallback(
   (day) => {
@@ -621,6 +692,14 @@ useEffect(() => {
 }, [weeklyLogs, handleActiveDay]);
   return (
     <div className="container-fluid">
+   {/* 🔶 Show warning when not clocked in */}
+      {!isClockedIn && (
+        <div className="alert alert-warning text-center mb-3">
+          ⚠️ Please <strong>Clock In</strong> to start your workday.
+          <br />
+          All actions are disabled until you Clock In.
+        </div>
+      )}
       {/* 🧭 Top Section */}
       <div className="row mb-4">
         {/* 👤 User Info */}
@@ -715,14 +794,14 @@ useEffect(() => {
       )}
 
       {/* Live Timer */}
-      {attendance?.clockIn && !attendance?.clockOut && (
-        <div className="fw-semibold text-primary mt-2">
-          ⏱ Working Time:{" "}
-          {String(Math.floor(elapsedTime / 3600)).padStart(2, "0")}:
-          {String(Math.floor((elapsedTime % 3600) / 60)).padStart(2, "0")}:
-          {String(Math.floor(elapsedTime % 60)).padStart(2, "0")}
-        </div>
-      )}
+    {isClockedIn && (
+  <div className="fw-semibold text-primary mt-2">
+    ⏱ Working Time:{" "}
+    {String(Math.floor(elapsedTime / 3600)).padStart(2, "0")}:
+    {String(Math.floor((elapsedTime % 3600) / 60)).padStart(2, "0")}:
+    {String(Math.floor(elapsedTime % 60)).padStart(2, "0")}
+  </div>
+)}
 
       {/* Total Worked Duration */}
       {attendance?.clockIn && attendance?.clockOut && (
@@ -735,98 +814,89 @@ useEffect(() => {
       )}
     </div>
 
-    <div className="text-end">
-      {attendance?.clockIn && !attendance?.clockOut ? (
-        <button
-          className="btn btn-danger btn-sm"
-          style={{
-            backgroundColor: "#dc3545",
-            color: "#fff",
-            border: "none",
-          }}
-          onClick={handleClockOut}
-        >
-          <i className="fas fa-sign-out-alt me-1"></i> Clock Out
-        </button>
-      ) : (
-        <button className="btn btn-success btn-sm" onClick={handleClockIn}>
-          <i className="fas fa-sign-in-alt me-1"></i> Clock In
-        </button>
-      )}
-    </div>
+ <div className="text-end">
+  {isClockedIn ? (
+    <button className="btn btn-danger btn-sm" onClick={handleClockOut}>
+      <i className="fas fa-sign-out-alt me-1"></i> Clock Out
+    </button>
+  ) : (
+    <button className="btn btn-success btn-sm" onClick={handleClockIn}>
+      <i className="fas fa-sign-in-alt me-1"></i> Clock In
+    </button>
+  )}
+</div>
+
   </div>
 </div>
 
 
 
       </div>
- {/* 🏆 Employee Appreciations Section */}
-<div className="dashboard-section mt-4">
-  <h5 className="mb-3 fw-semibold">Employee Appreciations</h5>
+{/* 🏆 Employee Appreciations + 📅 Weekly Timelogs Side by Side */}
+<div className="row mt-4 mb-4">
+  {/* Employee Appreciations */}
+  <div className="col-lg-5 col-md-12 mb-3">
+    <div className="card p-3 shadow-sm h-100">
+      <h5 className="mb-3 fw-semibold">Employee Appreciations</h5>
 
-  {recentAwards.length === 0 ? (
-    <p className="text-muted">No appreciations available.</p>
-  ) : (
-    <div className="card p-3 shadow-sm">
-      {recentAwards.map((award, index) => (
-        <div
-          key={award._id || index}
-          className="d-flex justify-content-between align-items-center border-bottom py-2"
-        >
-          {/* Left: Employee Info */}
-          <div className="d-flex align-items-center">
-            <img
-              src={award.employee?.profileImage || "/default-avatar.png"}
-              alt={award.employee?.name}
-              className="rounded-circle me-3"
-              style={{ width: 45, height: 45, objectFit: "cover" }}
-            />
-            <div>
-              <div className="fw-semibold">
-                {award.employee?.name || "N/A"}
+      {recentAwards.length === 0 ? (
+        <p className="text-muted">No appreciations available.</p>
+      ) : (
+        recentAwards.map((award, index) => (
+          <div
+            key={award._id || index}
+            className="d-flex justify-content-between align-items-center border-bottom py-2"
+          >
+            {/* Left: Employee Info */}
+            <div className="d-flex align-items-center">
+              <img
+                src={award.employee?.profileImage || "/default-avatar.png"}
+                alt={award.employee?.name}
+                className="rounded-circle me-3"
+                style={{ width: 45, height: 45, objectFit: "cover" }}
+              />
+              <div>
+                <div className="fw-semibold">
+                  {award.employee?.name || "N/A"}
+                </div>
+                <small className="text-muted">
+                  {award.employee?.designation || "Employee"}
+                </small>
               </div>
+            </div>
+
+            {/* Center: Award Info */}
+            <div className="text-end">
+              <div className="fw-semibold">{award.awardName}</div>
               <small className="text-muted">
-                {award.employee?.designation || "Employee"}
+                {new Date(award.date).toLocaleDateString("en-GB")}
               </small>
             </div>
-          </div>
 
-          {/* Center: Award Info */}
-          <div className="text-end">
-            <div className="fw-semibold">{award.awardName}</div>
-            <small className="text-muted">
-              {new Date(award.date).toLocaleDateString("en-GB")}
-            </small>
+            {/* Right: Trophy Icon */}
+            <div>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                fill={
+                  award.awardName.toLowerCase().includes("rising")
+                    ? "red"
+                    : "purple"
+                }
+                viewBox="0 0 24 24"
+              >
+                <path d="M21 3h-3V2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v1H3a1 1 0 0 0-1 1v4a5 5 0 0 0 5 5h.17A7.001 7.001 0 0 0 11 18.93V21H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7.001 7.001 0 0 0 16.83 13H17a5 5 0 0 0 5-5V4a1 1 0 0 0-1-1zM6 11a3 3 0 0 1-3-3V5h3v6zm15-3a3 3 0 0 1-3 3V5h3v3z" />
+              </svg>
+            </div>
           </div>
-
-          {/* Right: Trophy Icon */}
-          <div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="22"
-              height="22"
-              fill={
-                award.awardName.toLowerCase().includes("rising")
-                  ? "red"
-                  : "purple"
-              }
-              viewBox="0 0 24 24"
-            >
-              <path d="M21 3h-3V2a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1v1H3a1 1 0 0 0-1 1v4a5 5 0 0 0 5 5h.17A7.001 7.001 0 0 0 11 18.93V21H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.07A7.001 7.001 0 0 0 16.83 13H17a5 5 0 0 0 5-5V4a1 1 0 0 0-1-1zM6 11a3 3 0 0 1-3-3V5h3v6zm15-3a3 3 0 0 1-3 3V5h3v3z" />
-            </svg>
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
-  )}
-</div>
+  </div>
 
-
-  
-
-     {/* 📅 Weekly Timelogs */}
-<div className="row mb-4">
-  <div className="col-md-8">
+  {/* Weekly Timelogs */}
+  <div className="col-lg-7 col-md-12 mb-3">
     <div className="card p-3 shadow-sm h-100">
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-3">

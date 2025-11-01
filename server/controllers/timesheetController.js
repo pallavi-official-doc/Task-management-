@@ -69,9 +69,14 @@ exports.pauseTimer = async (req, res) => {
  * ⏸ Pause Timer (by Task ID)
  * PUT /api/timesheets/pause-by-task/:taskId
  */
+/**
+ * ⏸ Pause Timer (by Task ID)
+ * PUT /api/timesheets/pause-by-task/:taskId
+ */
 exports.pauseByTaskId = async (req, res) => {
   try {
     const { taskId } = req.params;
+
     const timesheet = await Timesheet.findOne({
       task: taskId,
       user: req.user.id,
@@ -82,11 +87,27 @@ exports.pauseByTaskId = async (req, res) => {
       return res.status(404).json({ message: "No active timesheet found" });
     }
 
+    const task = await Task.findById(taskId);
+
+    if (!task.running || !task.lastStartedAt) {
+      return res.status(400).json({ message: "Task not running" });
+    }
+
+    // ✅ Calculate time from last start until pause
     const now = new Date();
+    const started = new Date(task.lastStartedAt).getTime();
+    const secondsPassed = Math.floor((now - started) / 1000);
+
+    task.totalSeconds += secondsPassed;
+    task.running = false;
+    task.lastStartedAt = null;
+    await task.save();
+
+    // ✅ Mark pause log in timesheet
     timesheet.pauseLogs.push({ start: now });
     await timesheet.save();
 
-    res.json(timesheet);
+    res.json({ message: "Task paused", task, timesheet });
   } catch (err) {
     console.error("❌ pauseByTaskId error:", err);
     res.status(500).json({ message: "Failed to pause by task" });

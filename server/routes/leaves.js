@@ -10,37 +10,24 @@ const {
   updateLeaveStatus,
   cancelLeave,
   deleteLeave,
+  updateLeave,
 } = require("../controllers/leaves");
 
 // 🔐 All routes require authentication
 router.use(protect);
 
+// 👑 ADMIN ROUTES
+router.get("/admin", authorize("admin"), getAllLeavesForAdmin);
+router.put("/admin/status/:id", authorize("admin"), updateLeaveStatus);
+
 /**
  * 🧍 USER ROUTES
- * ---------------------------------------
  */
-
-// 📋 Get user's own leaves
 router.get("/", getMyLeaves);
-
-// ➕ Apply for a new leave (with optional file upload)
 router.post("/", upload.single("file"), createLeave);
-
-// ❌ Cancel a pending leave (user only)
 router.put("/cancel/:id", cancelLeave);
-
-// 🗑 Delete own leave (if pending or allowed)
 router.delete("/:id", deleteLeave);
-
-/**
- * 👑 ADMIN ROUTES
- * ---------------------------------------
- */
-
-// 📋 Get all leaves (with filters)
-router.get("/admin", authorize("admin"), getAllLeavesForAdmin);
-
-// ✏️ Approve / Reject a leave
-router.put("/admin/status/:id", authorize("admin"), updateLeaveStatus);
+// ✅ Add this route for updating a leave
+router.put("/:id", authorize("admin"), updateLeave);
 
 module.exports = router;

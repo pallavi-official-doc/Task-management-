@@ -125,3 +125,16 @@ exports.getMe = async (req, res) => {
     res.status(500).send("Server error");
   }
 };
+// @desc    Logout user & update lastSeen
+// @route   POST /api/auth/logout
+// @access  Private
+exports.logout = async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user.id, { lastSeen: new Date() });
+
+    res.json({ msg: "Logged out successfully" });
+  } catch (err) {
+    console.error("❌ Logout error:", err.message);
+    res.status(500).send("Server error");
+  }
+};

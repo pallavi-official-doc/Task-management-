@@ -25,6 +25,12 @@ import Attendance from "./pages/hr/Attendance";
 import Holiday from "./pages/hr/Holiday";
 import AppreciationPage from "./pages/hr/Appreciation";
 import ProfileSettings from "./pages/settings/ProfileSettings";
+import MessagesPage from "./pages/Messages/MessagesPage";
+import Tickets from "./pages/Tickets/TicketList";
+import TicketDetails from "./pages/Tickets/TicketDetails";
+
+// import { toast } from "react-toastify";
+// window.toast = toast;
 
 // ✅ Import Notice Board Page
 import NoticeBoard from "./pages/NoticeBoard";
@@ -41,30 +47,36 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* 🔐 Protected Routes */}
           <Route element={<PrivateRoute />}>
             <Route path="/dashboard" element={<Dashboard />}>
-              {/* 🏠 Dashboard Home */}
               <Route index element={<DashboardHome />} />
 
-              {/* 🧑‍💼 HR Section */}
+              {/* HR */}
               <Route path="hr/leaves" element={<Leaves />} />
               <Route path="hr/attendance" element={<Attendance />} />
               <Route path="hr/holiday" element={<Holiday />} />
               <Route path="hr/appreciation" element={<AppreciationPage />} />
 
-              {/* 💼 Work Section */}
+              {/* Work */}
               <Route path="projects" element={<Projects />} />
               <Route path="tasks" element={<Tasks />} />
               <Route path="tasks/:id" element={<TaskDetails />} />
               <Route path="create-task" element={<CreateTask />} />
               <Route path="timesheets" element={<Timesheet />} />
 
-              {/* ⚙️ Settings Section */}
+              {/* 🎫 Tickets */}
+              <Route path="tickets" element={<Tickets />} />
+
+              <Route path="tickets/:id" element={<TicketDetails />} />
+
+              {/* Settings */}
               <Route path="settings/profile" element={<ProfileSettings />} />
 
-              {/* 📢 Notice Board Section */}
+              {/* Notice Board */}
               <Route path="notice-board" element={<NoticeBoard />} />
+
+              {/* Messaging */}
+              <Route path="messages" element={<MessagesPage />} />
             </Route>
           </Route>
 

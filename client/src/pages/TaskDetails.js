@@ -52,31 +52,50 @@ const TaskDetails = () => {
     return () => clearInterval(intervalRef.current);
   }, [id, task?.running]);
 
-  // ▶ START Timer
   const handleStartTimer = async () => {
     try {
       await API.post(`/timesheets/start/${id}`);
-      fetchTask();
+
+      // ✅ Immediately start live timer locally
+      setTask((prev) => ({
+        ...prev,
+        running: true,
+        lastStartedAt: new Date(),
+      }));
+
+      // ✅ Live UI tick starts NOW
     } catch (err) {
       console.error("❌ Failed to start timer", err);
     }
   };
 
-  // ⏸ PAUSE Timer
   const handlePauseTimer = async () => {
     try {
       await API.put(`/timesheets/pause-by-task/${id}`);
-      fetchTask();
+
+      // ✅ Stop local timer immediately
+      setTask((prev) => ({
+        ...prev,
+        running: false,
+        lastStartedAt: null,
+        totalSeconds: duration, // freeze current duration
+      }));
     } catch (err) {
       console.error("❌ Failed to pause timer", err);
     }
   };
 
-  // ⏹ STOP Timer
   const handleStopTimer = async () => {
     try {
       await API.put(`/timesheets/stop-by-task/${id}`);
-      fetchTask();
+
+      // ✅ Stop & reset UI timer instantly
+      setTask((prev) => ({
+        ...prev,
+        running: false,
+        lastStartedAt: null,
+      }));
+      setDuration(0);
     } catch (err) {
       console.error("❌ Failed to stop timer", err);
     }
@@ -105,14 +124,18 @@ const TaskDetails = () => {
           ⏱ {formatTime(duration)}
         </div>
 
-        {!task.running ? (
+        {/* START or RESUME */}
+        {!task.running && (
           <button
             className="btn btn-outline-primary"
             onClick={handleStartTimer}
           >
-            <i className="fas fa-play me-1"></i> Start
+            <i className="fas fa-play me-1"></i>{" "}
+            {task.totalSeconds > 0 ? "Resume" : "Start"}
           </button>
-        ) : (
+        )}
+
+        {task.running && (
           <button
             className="btn btn-outline-secondary"
             onClick={handlePauseTimer}
@@ -121,9 +144,11 @@ const TaskDetails = () => {
           </button>
         )}
 
-        <button className="btn btn-outline-danger" onClick={handleStopTimer}>
-          <i className="fas fa-stop me-1"></i> Stop
-        </button>
+        {task.totalSeconds > 0 && (
+          <button className="btn btn-outline-danger" onClick={handleStopTimer}>
+            <i className="fas fa-stop me-1"></i> Stop
+          </button>
+        )}
       </div>
 
       {/* Task Info */}

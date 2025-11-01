@@ -393,6 +393,7 @@ import { useNavigate } from "react-router-dom";
 
 const TasksPage = () => {
   const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === "admin";
   const [tasks, setTasks] = useState([]);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -401,14 +402,22 @@ const TasksPage = () => {
   const [selectedTasks, setSelectedTasks] = useState([]);
   const navigate = useNavigate();
 
+  // ✅ Sync with clock-in status from localStorage
+  const [attendanceStatus, setAttendanceStatus] = useState(
+    localStorage.getItem("attendanceStatus") || "out"
+  );
+
   const statusOptions = [
     { value: "pending", label: "To Do", color: "warning" },
     { value: "doing", label: "Doing", color: "info" },
     { value: "completed", label: "Completed", color: "success" },
   ];
 
-  // 📡 Fetch tasks
+  // 📡 Fetch tasks (only when clocked in)
   const fetchTasks = useCallback(async () => {
+    const currentStatus = localStorage.getItem("attendanceStatus");
+    if (currentStatus === "out" || !currentStatus) return; // 🚫 Skip if not clocked in
+
     try {
       const endpoint = user?.role === "admin" ? "/tasks/all-tasks" : "/tasks";
       const res = await API.get(endpoint);
@@ -422,7 +431,17 @@ const TasksPage = () => {
     if (user) fetchTasks();
   }, [user, fetchTasks]);
 
-  // ⏱ Live update task timers every 1 second
+  // 🔁 Listen to changes from Dashboard (Clock In / Clock Out)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const updatedStatus = localStorage.getItem("attendanceStatus") || "out";
+      setAttendanceStatus(updatedStatus);
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  // ⏱ Live timer updater
   useEffect(() => {
     const interval = setInterval(() => {
       setTasks((prevTasks) =>
@@ -437,40 +456,17 @@ const TasksPage = () => {
         })
       );
     }, 1000);
-
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ Start / Pause / Stop handlers
-  // ✅ Start timer + Timesheet entry
-  // ✅ Start Timer → also starts Timesheet timer
-  const handleStart = async (taskId) => {
-    try {
-      await API.post(`/timesheets/start/${taskId}`);
-      fetchTasks(); // refresh table after starting
-    } catch (err) {
-      console.error("❌ Failed to start timer", err);
-    }
-  };
-
-  // ⏸ Pause Timer → pauses both Task & Timesheet
-  const handlePause = async (taskId) => {
-    try {
-      await API.put(`/timesheets/pause-by-task/${taskId}`);
-      fetchTasks();
-    } catch (err) {
-      console.error("❌ Failed to pause timer", err);
-    }
-  };
-
-  // ⏹ Stop Timer → finalizes Timesheet and updates Task totalSeconds
-  const handleStop = async (taskId) => {
-    try {
-      await API.put(`/timesheets/stop-by-task/${taskId}`);
-      fetchTasks();
-    } catch (err) {
-      console.error("❌ Failed to stop timer", err);
-    }
+  // 🕒 Format elapsed time
+  const formatElapsed = (totalSeconds) => {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m
+      .toString()
+      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   // ✅ Checkbox handlers
@@ -493,7 +489,12 @@ const TasksPage = () => {
   // 📝 Status change
   const handleStatusChange = async (id, newStatus) => {
     try {
-      await API.put(`/tasks/${id}`, { status: newStatus });
+      const currentTask = tasks.find((t) => t._id === id);
+      await API.put(`/tasks/${id}`, {
+        status: newStatus,
+        assignedTo:
+          currentTask?.assignedTo?._id || currentTask?.assignedTo || null,
+      });
       fetchTasks();
     } catch (err) {
       console.error("❌ Failed to update status", err);
@@ -501,14 +502,8 @@ const TasksPage = () => {
   };
 
   // 👁 View Task
-  const handleTaskClick = async (id) => {
-    try {
-      const res = await API.get(`/tasks/${id}`);
-      setSelectedTask(res.data);
-      setShowModal(true);
-    } catch (err) {
-      console.error("❌ Failed to fetch task details", err);
-    }
+  const handleTaskClick = (taskId) => {
+    navigate(`/dashboard/tasks/${taskId}`);
   };
 
   // ✏ Edit
@@ -527,16 +522,6 @@ const TasksPage = () => {
     }
   };
 
-  // 🕒 Format elapsed time
-  const formatElapsed = (totalSeconds) => {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return `${h.toString().padStart(2, "0")}:${m
-      .toString()
-      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
   // ✅ Filter + Search
   const filteredTasks = tasks.filter((task) => {
     const matchesFilter = filter === "all" ? true : task.status === filter;
@@ -550,9 +535,21 @@ const TasksPage = () => {
     <div className="p-3">
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h2>{user?.role === "admin" ? "All Tasks" : "My Tasks"}</h2>
+
+        {/* ✅ Add Task button disabled unless Clocked In */}
         <button
-          className="btn btn-primary"
-          onClick={() => navigate("/dashboard/create-task")}
+          className={`btn ${
+            attendanceStatus === "in" ? "btn-primary" : "btn-secondary"
+          }`}
+          onClick={() => {
+            if (attendanceStatus === "in") navigate("/dashboard/create-task");
+          }}
+          disabled={attendanceStatus !== "in"}
+          title={
+            attendanceStatus !== "in"
+              ? "Please Clock In to create a task"
+              : "Create new task"
+          }
         >
           <i className="fas fa-plus me-1"></i> Add Task
         </button>
@@ -600,7 +597,7 @@ const TasksPage = () => {
               <th>Due Date</th>
               <th>Hours Logged</th>
               <th>Assigned To</th>
-
+              <th>Assigned By</th>
               <th>Status</th>
               <th className="text-end">Action</th>
             </tr>
@@ -611,7 +608,6 @@ const TasksPage = () => {
                 const displayTime = formatElapsed(
                   task.displaySeconds || task.totalSeconds || 0
                 );
-
                 return (
                   <tr key={task._id}>
                     <td>
@@ -621,44 +617,49 @@ const TasksPage = () => {
                         onChange={() => handleCheckboxChange(task._id)}
                       />
                     </td>
-
                     <td
                       style={{
                         cursor: "pointer",
                         color: "#0d6efd",
                         textDecoration: "underline",
                       }}
-                      onClick={() => navigate(`/dashboard/tasks/${task._id}`)}
+                      onClick={() => handleTaskClick(task._id)}
                     >
                       {task.title}
                     </td>
-
                     <td>
                       {task.startDate
                         ? moment(task.startDate).format("DD MMM")
                         : "--"}
                     </td>
-
                     <td>
                       {task.dueDate
                         ? moment(task.dueDate).format("DD MMM")
                         : "--"}
                     </td>
-
                     <td className="text-danger">{displayTime}</td>
-
-                    {/* ✅ Assigned To */}
                     <td>
-                      {task.assignedTo ? (
+                      <div className="d-flex align-items-center gap-1">
+                        <i className="fas fa-user-circle text-secondary fs-5"></i>
+                        {task.assignedTo ? (
+                          <span>{task.assignedTo.name || "Unnamed User"}</span>
+                        ) : (
+                          <span className="text-muted fst-italic">
+                            Not Assigned
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      {task.user ? (
                         <div className="d-flex align-items-center gap-1">
-                          <i className="fas fa-user-circle text-secondary fs-5"></i>
-                          <span>{task.assignedTo.name}</span>
+                          <i className="fas fa-user-tie text-secondary fs-5"></i>
+                          <span>{task.user.name}</span>
                         </div>
                       ) : (
-                        <i className="fas fa-user-circle text-secondary fs-5"></i>
+                        <span className="text-muted">—</span>
                       )}
                     </td>
-
                     <td>
                       <div className="dropdown">
                         <button
@@ -682,6 +683,10 @@ const TasksPage = () => {
                             <li key={option.value}>
                               <button
                                 className="dropdown-item d-flex align-items-center gap-2"
+                                disabled={
+                                  task.status === "completed" &&
+                                  option.value !== "completed"
+                                }
                                 onClick={() =>
                                   handleStatusChange(task._id, option.value)
                                 }
@@ -701,7 +706,6 @@ const TasksPage = () => {
                         </ul>
                       </div>
                     </td>
-
                     <td className="text-end">
                       <div className="dropdown">
                         <button
@@ -717,7 +721,7 @@ const TasksPage = () => {
                               className="dropdown-item d-flex align-items-center gap-2"
                               onClick={() => handleTaskClick(task._id)}
                             >
-                              <i className="fas fa-eye"></i> View
+                              <i className="fas fa-eye text-primary"></i> View
                             </button>
                           </li>
                           <li>
@@ -725,17 +729,19 @@ const TasksPage = () => {
                               className="dropdown-item d-flex align-items-center gap-2"
                               onClick={() => handleEdit(task)}
                             >
-                              <i className="fas fa-edit"></i> Edit
+                              <i className="fas fa-edit text-warning"></i> Edit
                             </button>
                           </li>
-                          <li>
-                            <button
-                              className="dropdown-item text-danger d-flex align-items-center gap-2"
-                              onClick={() => handleDelete(task._id)}
-                            >
-                              <i className="fas fa-trash"></i> Delete
-                            </button>
-                          </li>
+                          {isAdmin && (
+                            <li>
+                              <button
+                                className="dropdown-item text-danger d-flex align-items-center gap-2"
+                                onClick={() => handleDelete(task._id)}
+                              >
+                                <i className="fas fa-trash"></i> Delete
+                              </button>
+                            </li>
+                          )}
                         </ul>
                       </div>
                     </td>
@@ -744,7 +750,7 @@ const TasksPage = () => {
               })
             ) : (
               <tr>
-                <td colSpan="8" className="text-center text-muted">
+                <td colSpan="9" className="text-center text-muted">
                   No tasks found
                 </td>
               </tr>
@@ -753,7 +759,7 @@ const TasksPage = () => {
         </table>
       </div>
 
-      {/* View Modal */}
+      {/* Task Details Modal */}
       <Modal
         show={showModal}
         onHide={() => setShowModal(false)}

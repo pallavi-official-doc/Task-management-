@@ -25,6 +25,9 @@ exports.getAttendance = async (req, res) => {
 /**
  * 🟢 Clock In
  * POST /api/attendance
+ */ /**
+ * 🟢 Clock In
+ * POST /api/attendance
  */
 exports.clockIn = async (req, res) => {
   try {
@@ -34,14 +37,14 @@ exports.clockIn = async (req, res) => {
 
     let attendance = await Attendance.findOne({ user: userId, date: today });
 
-    // Check for holiday
+    // ✅ Prevent clock-in on holidays
     const isHoliday = await Holiday.findOne({ date: today });
     if (isHoliday) {
       return res.status(400).json({ message: "Cannot clock in on a holiday" });
     }
 
+    // ✅ No attendance record yet → create one
     if (!attendance) {
-      // 🧠 Decide status based on clock-in time
       let status = "Present";
       const hour = moment(now).hour();
       if (hour >= 10 && hour < 13) status = "Late";
@@ -54,23 +57,27 @@ exports.clockIn = async (req, res) => {
         status,
       });
 
-      return res.json({
+      return res.status(200).json({
         message: "Clocked in successfully",
         attendance,
       });
     }
 
-    // If already clocked in
+    // ✅ Already clocked in today (no clock-out yet)
     if (attendance.clockIn && !attendance.clockOut) {
-      return res.status(400).json({ message: "Already clocked in" });
+      console.log("⏳ User already clocked in — returning same record.");
+      return res.status(200).json({
+        message: "Already clocked in — returning active attendance",
+        attendance,
+      });
     }
 
-    // Re-clock in after clocking out (optional)
+    // ✅ Re-clock in (if previously clocked out)
     attendance.clockIn = now;
     attendance.clockOut = null;
     await attendance.save();
 
-    res.json({
+    res.status(200).json({
       message: "Re-clocked in successfully",
       attendance,
     });
@@ -187,5 +194,41 @@ exports.getMonthlyAttendanceSummary = async (req, res) => {
   } catch (err) {
     console.error("❌ getMonthlyAttendanceSummary error:", err);
     res.status(500).json({ message: "Failed to fetch monthly attendance" });
+  }
+};
+/**
+ * ✅ Get today's attendance status for logged-in user
+ * GET /api/attendance/status
+ */
+exports.getAttendanceStatus = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = moment().startOf("day").toDate();
+
+    // Find today's attendance
+    const attendance = await Attendance.findOne({ user: userId, date: today });
+
+    // If no attendance, user hasn't clocked in yet
+    if (!attendance) {
+      return res.status(200).json({
+        clockIn: null,
+        clockOut: null,
+        status: "Not Clocked In",
+      });
+    }
+
+    // Return full current-day status
+    res.status(200).json({
+      clockIn: attendance.clockIn,
+      clockOut: attendance.clockOut,
+      status: attendance.status,
+      message:
+        attendance.clockIn && !attendance.clockOut
+          ? "Clocked In"
+          : "Clocked Out",
+    });
+  } catch (err) {
+    console.error("❌ Error fetching attendance status:", err);
+    res.status(500).json({ message: "Failed to fetch attendance status" });
   }
 };

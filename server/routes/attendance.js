@@ -5,7 +5,8 @@ const {
   getAttendance, // ✅ GET today's record
   clockIn, // ✅ POST clock in
   clockOut, // ✅ POST clock out
-  getMonthlyAttendanceSummary, // ✅ GET monthly records (for table)
+  getMonthlyAttendanceSummary,
+  getAttendanceStatus, // ✅ GET monthly records (for table)
 } = require("../controllers/attendanceController");
 
 router.use(protect);
@@ -18,6 +19,8 @@ router.post("/clock-in", clockIn);
 
 // 🔴 Clock Out ✅ FIXED PATH
 router.post("/clock-out", clockOut);
+// ✅ Get current day's attendance status (new endpoint)
+router.get("/status", getAttendanceStatus);
 
 // 📊 Monthly summary (React Attendance page)
 router.get("/", getMonthlyAttendanceSummary);

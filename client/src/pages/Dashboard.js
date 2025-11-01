@@ -12,6 +12,7 @@ const Dashboard = () => {
   const location = useLocation();
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [noticeOpen, setNoticeOpen] = useState(true);
+  const [messageOpen, setMessageOpen] = useState(true);
 
   if (!user) return <div>Loading...</div>;
 
@@ -204,6 +205,19 @@ const Dashboard = () => {
                 </ul>
               )}
             </li>
+            <li>
+              <Link
+                to="tickets"
+                className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                  location.pathname.includes("tickets")
+                    ? "bg-primary text-white"
+                    : "text-dark"
+                }`}
+              >
+                🎫
+                <span className={sidebarOpen ? "" : "d-none"}>Tickets</span>
+              </Link>
+            </li>
 
             {/* ⚙️ Settings Section */}
             <li className="mt-2">
@@ -267,6 +281,41 @@ const Dashboard = () => {
                         Notice Board
                       </span>
                     </Link>
+                  </li>
+                  {/* 💬 COMMUNICATION Section */}
+                  <li className="mt-2">
+                    <div
+                      className="d-flex justify-content-between align-items-center px-2 py-1 text-muted small"
+                      style={{ cursor: "pointer" }}
+                      onClick={() => setMessageOpen(!messageOpen)}
+                    >
+                      <span>COMMUNICATION</span>
+                      <FiChevronDown
+                        className={`transition ${
+                          messageOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+
+                    {messageOpen && (
+                      <ul className="nav flex-column ms-2">
+                        <li>
+                          <Link
+                            to="messages"
+                            className={`nav-link d-flex align-items-center gap-2 p-2 rounded ${
+                              location.pathname.includes("messages")
+                                ? "bg-primary text-white"
+                                : "text-dark"
+                            }`}
+                          >
+                            💬
+                            <span className={sidebarOpen ? "" : "d-none"}>
+                              Messages
+                            </span>
+                          </Link>
+                        </li>
+                      </ul>
+                    )}
                   </li>
                 </ul>
               )}
