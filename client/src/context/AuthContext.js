@@ -68,6 +68,7 @@
 import React, { createContext, useState, useEffect } from "react";
 import API from "../api/api";
 import { socket } from "../socket"; // ✅ import socket
+import { toast } from "react-toastify";
 
 const AuthContext = createContext();
 
@@ -204,6 +205,9 @@ export const AuthProvider = ({ children }) => {
       socket.off("ticketCommentUpdate");
     };
   }, [user]);
+  socket.on("eventNotification", (data) => {
+    toast.info(data.message);
+  });
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout }}>

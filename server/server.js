@@ -15,6 +15,7 @@ const holidayRoutes = require("./routes/holidays");
 const appreciationRoutes = require("./routes/appreciation");
 const noticeRoutes = require("./routes/noticeRoutes");
 const ticketRoutes = require("./routes/ticketRoutes");
+const eventRoutes = require("./routes/eventRoutes");
 
 dotenv.config();
 connectDB();
@@ -40,6 +41,7 @@ app.use("/api/appreciations", appreciationRoutes);
 app.use("/api/notices", noticeRoutes);
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/tickets", ticketRoutes);
+app.use("/api/events", eventRoutes);
 
 app.use("/uploads", express.static("uploads"));
 const http = require("http");
@@ -53,7 +55,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-
+app.set("io", io);
 // ✅ Store online users
 let onlineUsers = new Map();
 
@@ -73,7 +75,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ✅ Ticket created or assigned
   socket.on("ticketNotify", ({ to, ticketId, message }) => {
     const receiverSocket = onlineUsers.get(to);
     if (receiverSocket) {
@@ -81,12 +82,24 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ✅ New comment on ticket
   socket.on("ticketComment", ({ to, ticketId }) => {
     const receiverSocket = onlineUsers.get(to);
     if (receiverSocket) {
       io.to(receiverSocket).emit("ticketCommentUpdate", { ticketId });
     }
+  });
+
+  // ✅ Event Assigned notification (correct place)
+  socket.on("eventAssigned", ({ users, event }) => {
+    users.forEach((id) => {
+      const socketId = onlineUsers.get(id.toString());
+      if (socketId) {
+        io.to(socketId).emit("eventNotification", {
+          message: `New Event Assigned: ${event.title}`,
+          eventId: event._id,
+        });
+      }
+    });
   });
 
   socket.on("disconnect", async () => {

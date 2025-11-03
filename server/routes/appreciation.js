@@ -20,9 +20,9 @@ router.route("/:id").put(updateAppreciation).delete(deleteAppreciation);
 router.get("/recent", async (req, res) => {
   try {
     const awards = await Appreciation.find()
-      .populate("employee", "name designation profileImage")
+      .populate("employee", "name designation profileImage gender") // ✅ Add gender
       .sort({ date: -1 })
-      .limit(5); // show top 5 recent awards
+      .limit(5);
 
     res.json(awards);
   } catch (error) {

@@ -101,5 +101,18 @@ router.get("/:id/members", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+// ✅ Get projects assigned to logged-in user
+router.get("/assigned-to-me", protect, async (req, res) => {
+  try {
+    const projects = await Project.find({
+      assignedUsers: req.user._id,
+    }).select("_id name");
+
+    res.json(projects);
+  } catch (err) {
+    console.error("ERROR fetching user projects:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 module.exports = router;

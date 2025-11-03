@@ -6,50 +6,55 @@ import {
   Navigate,
 } from "react-router-dom";
 import "@fortawesome/fontawesome-free/css/all.min.css";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Dashboard from "./pages/Dashboard";
 
-import CreateTask from "./pages/CreateTask";
-import Timesheet from "./pages/Timesheet";
-import Projects from "./pages/Projects";
-import Tasks from "./pages/Tasks";
-import DashboardHome from "./pages/DashboardHome";
-import TaskDetails from "./pages/TaskDetails";
+// Layout
+import DashboardLayout from "./pages/DashboardLayout";
+
+// Pages
+import Dashboard from "./pages/Dashboard"; // Dashboard Home
 import Leaves from "./pages/hr/Leaves";
 import Attendance from "./pages/hr/Attendance";
 import Holiday from "./pages/hr/Holiday";
 import AppreciationPage from "./pages/hr/Appreciation";
-import ProfileSettings from "./pages/settings/ProfileSettings";
-import MessagesPage from "./pages/Messages/MessagesPage";
+
+import Projects from "./pages/Projects";
+import Tasks from "./pages/Tasks";
+import TaskDetails from "./pages/TaskDetails";
+import CreateTask from "./pages/CreateTask";
+import Timesheet from "./pages/Timesheet";
+
 import Tickets from "./pages/Tickets/TicketList";
 import TicketDetails from "./pages/Tickets/TicketDetails";
 
-// import { toast } from "react-toastify";
-// window.toast = toast;
-
-// ✅ Import Notice Board Page
+import Events from "./pages/Events";
+import ProfileSettings from "./pages/settings/ProfileSettings";
 import NoticeBoard from "./pages/NoticeBoard";
+import MessagesPage from "./pages/Messages/MessagesPage";
 
 function App() {
   return (
     <AuthProvider>
       <Router>
         <Routes>
-          {/* 🌐 Default redirect */}
+          {/* Redirect root to dashboard */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-          {/* 🌐 Public Routes */}
+          {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
+          {/* Private Routes */}
           <Route element={<PrivateRoute />}>
-            <Route path="/dashboard" element={<Dashboard />}>
-              <Route index element={<DashboardHome />} />
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              <Route index element={<Dashboard />} />
 
               {/* HR */}
               <Route path="hr/leaves" element={<Leaves />} />
@@ -64,25 +69,29 @@ function App() {
               <Route path="create-task" element={<CreateTask />} />
               <Route path="timesheets" element={<Timesheet />} />
 
-              {/* 🎫 Tickets */}
+              {/* Tickets */}
               <Route path="tickets" element={<Tickets />} />
-
               <Route path="tickets/:id" element={<TicketDetails />} />
+
+              {/* Events */}
+              <Route path="events" element={<Events />} />
 
               {/* Settings */}
               <Route path="settings/profile" element={<ProfileSettings />} />
 
-              {/* Notice Board */}
+              {/* Notice */}
               <Route path="notice-board" element={<NoticeBoard />} />
 
-              {/* Messaging */}
+              {/* Chat */}
               <Route path="messages" element={<MessagesPage />} />
             </Route>
           </Route>
 
-          {/* 🚫 404 Fallback */}
+          {/* 404 */}
           <Route path="*" element={<div>404 - Page Not Found</div>} />
         </Routes>
+
+        <ToastContainer position="top-right" autoClose={3000} />
       </Router>
     </AuthProvider>
   );

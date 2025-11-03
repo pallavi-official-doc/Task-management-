@@ -11,7 +11,7 @@ const ProfileSettings = () => {
     password: "",
     mobile: "",
     country: "India",
-    gender: "",
+    gender: "Male",
     maritalStatus: "",
     dob: "",
     slackId: "",
